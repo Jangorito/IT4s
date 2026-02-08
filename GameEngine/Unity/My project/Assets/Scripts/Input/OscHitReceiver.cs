@@ -4,6 +4,7 @@ using IT4s.Input;
 
 // extOSC namespaces:
 using extOSC;
+using extOSC.Core;
 
 namespace IT4s.Input
 {
@@ -21,6 +22,7 @@ namespace IT4s.Input
         [SerializeField] private int logEveryNHits = 25;
 
         private HitBuffer _buffer;
+        private IOSCBind _hitBind;   // <-- store bind handle
         public HitBuffer Buffer => _buffer;
 
         private void Awake()
@@ -37,12 +39,16 @@ namespace IT4s.Input
 
         private void OnEnable()
         {
-            receiver.Bind(address, OnHitMessage);
+            _hitBind = receiver.Bind(address, OnHitMessage);
         }
 
         private void OnDisable()
         {
-            receiver.Unbind(address, OnHitMessage);
+            if (_hitBind != null)
+            {
+                receiver.Unbind(_hitBind);
+                _hitBind = null;
+            }
         }
 
         private void OnHitMessage(OSCMessage message)
