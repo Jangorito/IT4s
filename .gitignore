@@ -1,0 +1,49 @@
+############################
+# OS / Editor junk
+############################
+.DS_Store
+Thumbs.db
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+############################
+# Unity (global)
+############################
+[Ll]ibrary/
+[Tt]emp/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+obj/
+.vs/
+
+############################
+# Unity auto-generated files
+############################
+*.csproj
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+
+############################
+# Build outputs
+############################
+Build/
+Builds/
+
+############################
+# AudioEngine (Bela)
+############################
+AudioEngine/build/
+AudioEngine/.vscode/
+AudioEngine/*.o
+AudioEngine/*.elf
+
+############################
+# Misc
+############################
+*.log
