@@ -25,6 +25,13 @@ namespace IT4s.Input
         private IOSCBind _hitBind;   // <-- store bind handle
         public HitBuffer Buffer => _buffer;
 
+        private long _lastSamples;
+        private bool _hasLastSamples;
+
+        public bool HasLastSamples => _hasLastSamples;
+        public long LastSamples => _lastSamples;
+
+
         private void Awake()
         {
             _buffer = new HitBuffer();
@@ -62,6 +69,10 @@ namespace IT4s.Input
             long tSamples = ReadInt64(message.Values[0]);
             int pad = ReadInt32(message.Values[1]);
             int vel = ReadInt32(message.Values[2]);
+
+            _lastSamples = tSamples;
+            _hasLastSamples = true;
+
 
             // Clamp velocity into MIDI-ish 0..127 (Bela might send wider if you choose later)
             vel = Mathf.Clamp(vel, 0, 127);
