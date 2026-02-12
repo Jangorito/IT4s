@@ -5,8 +5,12 @@ using IT4s.Data;
 
 public class IT4ChuckTurnPlayer : MonoBehaviour
 {
+    [Header("ChucK")]
     [SerializeField] private ChuckMainInstance chuck;
     [SerializeField] private string chuckFile = "Chuck/IT4_TurnPlayer.ck";
+
+    [Header("Playback")]
+    [SerializeField] private bool metronomeOnPlayback = true;
 
     private bool ready;
     private Chuck.IntCallback readyCb;
@@ -38,16 +42,22 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
         Debug.Log("[IT4] ChucK TurnPlayer ready.");
     }
 
+    public void SetMetronomeEnabled(bool enabled)
+    {
+        metronomeOnPlayback = enabled;
+    }
+
     public void Play(PatternTurn turn)
     {
         if (!ready || turn == null || turn.velocity == null || turn.offsetSamples == null)
             return;
 
         int stepCount = Math.Min(turn.velocity.Length, turn.offsetSamples.Length);
+        int safeStepsPerQuarter = Mathf.Max(1, turn.stepsPerQuarter);
 
         // EXACTLY matches PatternCompiler math
         double secPerQuarter = 60.0 / turn.bpm;
-        double secPerStep = secPerQuarter / turn.stepsPerQuarter;
+        double secPerStep = secPerQuarter / safeStepsPerQuarter;
         double samplesPerStepD = secPerStep * turn.sampleRate;
 
         int samplesPerStep = Math.Max(1, (int)Math.Round(samplesPerStepD));
@@ -61,58 +71,21 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
             off[i] = turn.offsetSamples[i];
         }
 
-        Debug.Log($"[IT4] Playing turn {turn.turnId} with {stepCount} steps, {samplesPerStep} samples");
-        Debug.Log($"[IT4] Calculated velocities: {string.Join(", ", vel)}");
-        Debug.Log($"[IT4] Calculated offsets: {string.Join(", ", off)}");
-        chuck.SetInt("stepCount", stepCount);
-        chuck.SetInt("samplesPerStep", samplesPerStep);
-        // chuck.SetIntArray("velocity", vel);
-        // chuck.SetIntArray("offsetSamples", off);
+        bool ok = true;
+        ok &= chuck.SetInt("stepCount", stepCount);
+        ok &= chuck.SetInt("samplesPerStep", samplesPerStep);
+        ok &= chuck.SetInt("stepsPerQuarter", safeStepsPerQuarter);
+        ok &= chuck.SetInt("metronomeEnabled", metronomeOnPlayback ? 1 : 0);
+        ok &= chuck.SetIntArray_AT("velocity", vel);
+        ok &= chuck.SetIntArray_AT("offsetSamples", off);
 
-        if (chuck.SetIntArray_AT("velocity", vel) !=  true)
+        if (!ok)
         {
-            Debug.LogError("[IT4] Failed to set velocity array in ChucK.");
-            return;
-        }
-        if (chuck.SetIntArray_AT("offsetSamples", off) != true)
-        {
-            Debug.LogError("[IT4] Failed to set offsetSamples array in ChucK.");
-            return;
-        }
-
-        Debug.Log("[IT4] Setting turn data in ChucK:");
-        
-        if (chuck.GetInt("stepCount", (v) => Debug.Log("[IT4] stepCount in ck: " + v)) == false)
-        {
-            Debug.LogError("[IT4] Failed to get stepCount from ChucK for verification.");
-            return;
-        }
-        
-        if (chuck.GetInt("samplesPerStep", (v) => Debug.Log("[IT4] samplesPerStep in ck: " + v)) == false)
-        {
-            Debug.LogError("[IT4] Failed to get samplesPerStep from ChucK for verification.");
-            return;
-        }
-        if (chuck.GetIntArray("velocity", (arr, len) =>
-        {
-            var n = Math.Min(arr.Length, (int)len);
-            Debug.Log("[IT4] velocity in ck: " + string.Join(", ", arr[..n]));
-        }) == false)
-        {
-            Debug.LogError("[IT4] Failed to get velocity array from ChucK for verification.");
-            return;
-        }
-        if (chuck.GetIntArray("offsetSamples", (arr, len) =>
-        {
-            var n = Math.Min(arr.Length, (int)len);
-            Debug.Log("[IT4] offsetSamples in ck: " + string.Join(", ", arr[..n]));
-        }) == false)
-        {
-            Debug.LogError("[IT4] Failed to get offsetSamples array from ChucK for verification.");
+            Debug.LogError("[IT4] Failed to push playback data to ChucK.");
             return;
         }
 
         chuck.BroadcastEvent("playTurn");
-        Debug.Log("[IT4] Broadcasted 'playTurn' " + turn.turnId + " with " + stepCount + " steps.");
+        Debug.Log($"[IT4] Broadcasted 'playTurn' turn={turn.turnId} steps={stepCount} metronome={(metronomeOnPlayback ? "on" : "off")}");
     }
 }
