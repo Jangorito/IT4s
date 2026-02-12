@@ -50,6 +50,9 @@ namespace IT4s.Rhythm
 
                 // microtiming offset (samples from step center)
                 int off = (int)(relSamples - stepCenter);
+                int maxOff = (int)Math.Round(samplesPerStep / 2.0);
+                off = Math.Clamp(off, -maxOff, maxOff);
+                
 
                 // collision rule: max velocity wins
                 if (h.velocity > velocity[step])
@@ -64,6 +67,7 @@ namespace IT4s.Rhythm
                 turnId = window.turnId,
                 bpm = q.bpm,
                 stepsPerQuarter = q.stepsPerQuarter,
+                sampleRate = q.sampleRate,
                 startSamples = window.startSamples,
                 endSamples = window.endSamples,
                 velocity = velocity,

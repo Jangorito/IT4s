@@ -13,6 +13,7 @@ namespace IT4s.Rhythm
     {
         [Header("Dependencies")]
         [SerializeField] private OscHitReceiver hitReceiver;
+        [SerializeField] private IT4ChuckTurnPlayer turnPlayer;
 
         [Header("Controls")]
         [SerializeField] private KeyCode startKey = KeyCode.S;
@@ -45,6 +46,12 @@ namespace IT4s.Rhythm
             {
                 Debug.LogError("[TurnCaptureController] No OscHitReceiver assigned.");
                 enabled = false;
+            }
+
+            if (turnPlayer == null)
+            {
+                // turnPlayer = new IT4ChuckTurnPlayer();
+                turnPlayer = FindObjectOfType<IT4ChuckTurnPlayer>();
             }
         }
 
@@ -139,6 +146,16 @@ namespace IT4s.Rhythm
             
 
             Debug.Log($"[TurnCaptureController] END turn {window.turnId}: {hits.Count} hits | {window}");
+
+            if (turnPlayer == null)
+            {
+                Debug.LogWarning("[TurnCaptureController] No IT4ChuckTurnPlayer assigned/found. Skipping playback.");
+                return;
+            }
+
+
+            Debug.Log($"[TurnCaptureController] Sending turn {pattern.turnId} to turnPlayer.");
+            turnPlayer.Play(pattern);
         }
     }
 }

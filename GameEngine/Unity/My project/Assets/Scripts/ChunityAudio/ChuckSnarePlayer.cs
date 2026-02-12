@@ -49,6 +49,7 @@ public class ChuckSnarePlayer : MonoBehaviour
     {
         if (!chuckReady) return;
         chuck.BroadcastEvent("snareTrig");
+        Debug.Log("[UNITY] Broadcasted snareTrig event to ChucK.");
     }
 
     // Quick test: press LeftControl to hear snare

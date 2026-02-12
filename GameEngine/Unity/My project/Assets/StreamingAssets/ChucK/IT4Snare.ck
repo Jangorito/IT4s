@@ -31,6 +31,7 @@ fun void playSnare()
 
     // (Optional) you can fade gain down here if you want tighter hits later
     // 0.9 => snare.gain;
+    <<< "[CHUCK] Played snare hit." >>>;
 }
 
 while(true)
