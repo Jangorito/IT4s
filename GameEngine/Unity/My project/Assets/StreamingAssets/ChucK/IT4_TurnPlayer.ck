@@ -15,15 +15,15 @@ global int offsetSamples[0];  // length = stepCount (microtiming offset from gri
 
 // --- turn audio ---
 SndBuf snare => Gain g => dac;
-1.0 => g.gain;
+0.0 => g.gain;
 me.dir() + "snare.wav" => snare.read;
 0 => snare.gain; // keep silent until triggered
 
 // --- metronome audio ---
-Impulse clkImp => ResonZ clkRes => Gain clkGain => dac;
-1800 => clkRes.freq;
-20 => clkRes.Q;
-0.0 => clkGain.gain;
+SndBuf metronome => Gain mGain => dac;
+me.dir() + "metronome.wav" => metronome.read;
+0 => mGain.gain;
+
 
 1 => ckReady;
 
@@ -51,13 +51,13 @@ fun void metroClick(int accented)
     <<< "Metronome click (accented:" + accented + ")" >>>;
     if(accented != 0)
     {
-        2300 => clkRes.freq;
-        0.35 => clkGain.gain;
+        // 2300 => clkRes.freq;
+        25 => mGain.gain;
     }
     else
     {
-        1600 => clkRes.freq;
-        0.22 => clkGain.gain;
+        // 1600 => clkRes.freq;
+        10 => mGain.gain;         
     }
 
     1 => clkImp.next;
