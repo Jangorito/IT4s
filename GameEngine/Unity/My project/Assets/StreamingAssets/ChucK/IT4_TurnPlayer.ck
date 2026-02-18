@@ -13,8 +13,6 @@ global int metronomeEnabled;
 global int velocity[0];       // length = stepCount
 global int offsetSamples[0];  // length = stepCount (microtiming offset from grid point)
 
-0 => metronomeEnabled;
-
 // --- turn audio ---
 SndBuf snare => Gain g => dac;
 1.0 => g.gain;
