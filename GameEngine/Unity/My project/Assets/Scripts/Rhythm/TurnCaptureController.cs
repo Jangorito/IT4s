@@ -13,6 +13,7 @@ namespace IT4s.Rhythm
     {
         [Header("Dependencies")]
         [SerializeField] private OscHitReceiver hitReceiver;
+        [SerializeField] private IT4ChuckTurnPlayer turnPlayer;
 
         [Header("Controls")]
         [SerializeField] private KeyCode startKey = KeyCode.S;
@@ -22,7 +23,14 @@ namespace IT4s.Rhythm
         [SerializeField] private bool logHitsInTurn = false;
         [SerializeField] private int maxHitLogs = 30;
 
+        [Header("Quantisation")]
+        [SerializeField] private float fixedBpm = 120f;
+        [SerializeField] private int stepsPerQuarter = 12;
+        [SerializeField] private int sampleRate = 48000;
+
         private TurnManager _turnManager;
+        private PatternCompiler _compiler;
+
 
         // "now" = latest Bela sample time observed.
         private long _latestSamples;
@@ -31,11 +39,19 @@ namespace IT4s.Rhythm
         private void Awake()
         {
             _turnManager = new TurnManager();
+            _compiler = new PatternCompiler();
+
 
             if (hitReceiver == null)
             {
                 Debug.LogError("[TurnCaptureController] No OscHitReceiver assigned.");
                 enabled = false;
+            }
+
+            if (turnPlayer == null)
+            {
+                // turnPlayer = new IT4ChuckTurnPlayer();
+                turnPlayer = FindObjectOfType<IT4ChuckTurnPlayer>();
             }
         }
 
@@ -62,7 +78,7 @@ namespace IT4s.Rhythm
                 tSamples = hitReceiver.LastSamples;
                 return true;
             }
-        
+
             tSamples = 0;
             return false;
         }
@@ -104,7 +120,13 @@ namespace IT4s.Rhythm
             // Slice hits for this window
             List<HitEvent> hits = hitReceiver.Buffer.Slice(window.startSamples, window.endSamples);
 
-            Debug.Log($"[TurnCaptureController] END turn {window.turnId}: {hits.Count} hits | {window}");
+            var q = new QuantisationSettings(fixedBpm, stepsPerQuarter, sampleRate);
+            PatternTurn pattern = _compiler.Compile(window, hits, q);
+
+            Debug.Log(
+                $"[PatternCompiler] turn={pattern.turnId} " +
+                $"steps={pattern.StepCount} bpm={pattern.bpm}"
+            );
 
             if (logHitsInTurn)
             {
@@ -114,6 +136,26 @@ namespace IT4s.Rhythm
                 if (hits.Count > n)
                     Debug.Log($"  ... +{hits.Count - n} more");
             }
+
+            // Log derived rhythm representation
+            for (int i = 0; i < pattern.StepCount; i++)
+            {
+                if (pattern.velocity[i] > 0)
+                    Debug.Log($"  step {i}: vel={pattern.velocity[i]} off={pattern.offsetSamples[i]}");
+            }
+            
+
+            Debug.Log($"[TurnCaptureController] END turn {window.turnId}: {hits.Count} hits | {window}");
+
+            if (turnPlayer == null)
+            {
+                Debug.LogWarning("[TurnCaptureController] No IT4ChuckTurnPlayer assigned/found. Skipping playback.");
+                return;
+            }
+
+
+            Debug.Log($"[TurnCaptureController] Sending turn {pattern.turnId} to turnPlayer.");
+            turnPlayer.Play(pattern);
         }
     }
 }

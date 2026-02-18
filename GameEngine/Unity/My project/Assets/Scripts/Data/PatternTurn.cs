@@ -14,6 +14,8 @@ namespace IT4s.Data
         public float bpm;
         public int stepsPerQuarter;     // e.g., 12 for flexible grid
 
+        public int sampleRate;         // for converting step offsets to seconds in ChucK
+        
         // Window grounding (so patterns remain traceable to raw events)
         public long startSamples;
         public long endSamples;

@@ -47,3 +47,4 @@ AudioEngine/*.elf
 # Misc
 ############################
 *.log
+GameEngine/Unity/My project/Assets/Chunity/Plugins/x86_64/AudioPluginChuck.dll
