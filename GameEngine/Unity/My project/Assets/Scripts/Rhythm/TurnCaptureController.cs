@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using IT4s.Data;
 using IT4s.Input;
+using IT4s.Rhythm.Transformations;
 
 namespace IT4s.Rhythm
 {
@@ -24,12 +25,13 @@ namespace IT4s.Rhythm
         [SerializeField] private int maxHitLogs = 30;
 
         [Header("Quantisation")]
-        [SerializeField] private float fixedBpm = 120f;
+        [SerializeField] private float fixedBpm = 92f;
         [SerializeField] private int stepsPerQuarter = 12;
         [SerializeField] private int sampleRate = 48000;
 
         private TurnManager _turnManager;
         private PatternCompiler _compiler;
+        // private SimpleTransformer _transformer;
 
 
         // "now" = latest Bela sample time observed.
@@ -145,7 +147,7 @@ namespace IT4s.Rhythm
             }
             
 
-            Debug.Log($"[TurnCaptureController] END turn {window.turnId}: {hits.Count} hits | {window}");
+            Debug.Log($"[TurnCaptureController] END turn {window.turnId}: {hits.Count} hits | pattern: {string.Join(", ", pattern.velocity)}");
 
             if (turnPlayer == null)
             {
@@ -155,7 +157,11 @@ namespace IT4s.Rhythm
 
 
             Debug.Log($"[TurnCaptureController] Sending turn {pattern.turnId} to turnPlayer.");
-            turnPlayer.Play(pattern);
+            // turnPlayer.Play(pattern);
+            // SimpleTransformer.Transform(pattern, SimpleTransformer.Mode.Triplah);
+            var ai = SimpleTransformer.Transform(pattern, SimpleTransformer.Mode.Triplah);
+            turnPlayer.Play(ai);
+
         }
     }
 }
