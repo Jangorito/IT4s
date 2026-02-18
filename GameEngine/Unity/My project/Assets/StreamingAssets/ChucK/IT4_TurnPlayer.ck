@@ -13,9 +13,11 @@ global int metronomeEnabled;
 global int velocity[0];       // length = stepCount
 global int offsetSamples[0];  // length = stepCount (microtiming offset from grid point)
 
+0 => metronomeEnabled;
+
 // --- turn audio ---
 SndBuf snare => Gain g => dac;
-0.0 => g.gain;
+1.0 => g.gain;
 me.dir() + "snare.wav" => snare.read;
 0 => snare.gain; // keep silent until triggered
 
@@ -23,6 +25,7 @@ me.dir() + "snare.wav" => snare.read;
 SndBuf metronome => Gain mGain => dac;
 me.dir() + "metronome.wav" => metronome.read;
 0 => mGain.gain;
+0 => metronome.gain;
 
 
 1 => ckReady;
@@ -51,17 +54,15 @@ fun void metroClick(int accented)
     <<< "Metronome click (accented:" + accented + ")" >>>;
     if(accented != 0)
     {
-        // 2300 => clkRes.freq;
-        25 => mGain.gain;
+        1.0 => mGain.gain;
     }
     else
     {
-        // 1600 => clkRes.freq;
-        10 => mGain.gain;         
+        0.7 => mGain.gain;
     }
 
-    1 => clkImp.next;
-    // TODO: found out why the we can't hear any metronome clicks, inspect timing/now functionality
+    0 => metronome.pos;
+    1 => metronome.gain;
 }
 
 fun void playMetronomeForTurn(int turnLengthSamples, int quarterSamples)
