@@ -159,7 +159,9 @@ namespace IT4s.Rhythm
             Debug.Log($"[TurnCaptureController] Sending turn {pattern.turnId} to turnPlayer.");
             // turnPlayer.Play(pattern);
             // SimpleTransformer.Transform(pattern, SimpleTransformer.Mode.Triplah);
-            var ai = SimpleTransformer.Transform(pattern, SimpleTransformer.Mode.Triplets);
+            // var ai = SimpleTransformer.Transform(pattern, SimpleTransformer.Mode.Triplets);
+            var ai = FeatureTransformer.Transform(pattern, FeatureTransformer.Mode.Auto);
+
             turnPlayer.Play(ai);
 
         }
