@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <libraries/OscSender/OscSender.h>  // Bela's built in OSC sender library
 #include <atomic>
+#include <unistd.h>
 
 // ========== SSH RUN COMMAND ==========
 // ssh -tt root@bela.local "cd /root/Bela && make PROJECT=IT4 run"
@@ -23,15 +24,16 @@ static const int TARGET_PORT = 7000;
 
 // ========== Bela OSC sender ==========
 OscSender gOscSender;
+AuxiliaryTask gOscTask = nullptr;
 
 // ========== one detected drum hit ==========
 struct HitEvent
 {
-    int64_t tSamples;
+    int32_t tHigh;
+    int32_t tLow;
     int32_t pad;
     int32_t vel;
 };
-
 // ========== HitEvent queue for communicating between Bela's audio thread and OSC thread ==========
 static const unsigned int QUEUE_SIZE = 128;
 
@@ -84,10 +86,11 @@ void oscSenderLoop(void*)
         while(dequeueHit(ev))
         {
             gOscSender.newMessage("/it4/hit")
-                .add((int64_t)ev.tSamples)
-                .add((int32_t)ev.pad)
-                .add((int32_t)ev.vel)
-                .send();
+              .add((int)ev.tHigh)
+              .add((int)ev.tLow)
+              .add((int)ev.pad)
+              .add((int)ev.vel)
+              .send();
         }
 
         usleep(1000);
@@ -143,10 +146,15 @@ bool setup(BelaContext *context, void *userData)
   gOscSender.setup(TARGET_PORT, TARGET_IP);
   rt_printf("OSC sender ready -> %s:%d\n", TARGET_IP, TARGET_PORT);
 
-  Bela_runAuxiliaryTask(oscSenderLoop);
-  rt_printf("OSC sender thread started\n");
+  gOscTask = Bela_createAuxiliaryTask(oscSenderLoop, 50, "osc-sender");
+  if(!gOscTask) {
+    rt_fprintf(stderr, "Failed to create OSC sender task\n");
+    return false;
+  }
 
-  return true;
+  Bela_scheduleAuxiliaryTask(gOscTask);
+  rt_printf("OSC sender task started\n");
+    return true;
 }
 
 // ========== RENDER LOOP ==========
@@ -223,23 +231,25 @@ void render(BelaContext *context, void *userData)
         float vel = clamp01(gPeak * VEL_GAIN);
 
         // Calculate hit time in seconds (approximation)
-        double t = (context->audioFramesElapsed + n) / (double)context->audioSampleRate;
+        // double t = (context->audioFramesElapsed + n) / (double)context->audioSampleRate;
 
         // rt_printf("HIT t=%.6f vel=%.3f peak=%.5f base=%.5f\n", t, vel, gPeak, gBaseline);
 
         // Create hit event and add to queue for OSC thread to send
-        int64_t tSamples = (int64_t)context->audioFramesElapsed + (int64_t)n;
-
+        int64_t tSamples = (int64_t)context->audioFramesElapsed + (int64_t)n;       
         int32_t midiVel = (int32_t)roundf(vel * 127.0f);
-
-        HitEvent ev;
-        ev.tSamples = tSamples;
-        ev.pad = 0;
-        ev.vel = midiVel;
-
-        enqueueHit(ev);
+        if(midiVel < 0) midiVel = 0;
+        if(midiVel > 127) midiVel = 127;
 
         rt_printf("HIT samples=%lld vel=%d\n", (long long)tSamples, midiVel);
+
+        HitEvent ev;
+        ev.tHigh = (int32_t)((uint64_t)tSamples >> 32);
+        ev.tLow  = (int32_t)((uint64_t)tSamples & 0xFFFFFFFF);
+        ev.pad   = 0;
+        ev.vel   = midiVel;
+
+        enqueueHit(ev);
       }
     }
   }
