@@ -1,6 +1,5 @@
 using UnityEngine;
 using IT4s.Data;
-using IT4s.Input;
 
 // extOSC namespaces:
 using extOSC;
@@ -10,7 +9,12 @@ namespace IT4s.Input
 {
     /// <summary>
     /// Receives OSC hit messages from Bela and appends them to an in-memory HitBuffer.
-    /// Expects: /it4/hit <tSamples:int64> <pad:int32> <vel:int32>
+    ///
+    /// Expected message format:
+    /// /it4/hit <tHigh:int32> <tLow:int32> <pad:int32> <vel:int32>
+    ///
+    /// Bela splits the 64-bit sample timestamp into high/low 32-bit words.
+    /// Unity reconstructs it back into a signed 64-bit sample timestamp.
     /// </summary>
     public class OscHitReceiver : MonoBehaviour
     {
@@ -30,7 +34,6 @@ namespace IT4s.Input
 
         public bool HasLastSamples => _hasLastSamples;
         public long LastSamples => _lastSamples;
-
 
         private void Awake()
         {
@@ -60,51 +63,62 @@ namespace IT4s.Input
 
         private void OnHitMessage(OSCMessage message)
         {
-            // Expected args: (long, int, int)
-            // extOSC supports Int and Long types depending on what was sent.
+            // Expected args:
+            // 0 = tHigh (int32)
+            // 1 = tLow  (int32)
+            // 2 = pad   (int32)
+            // 3 = vel   (int32)
 
-            if (message.Values.Count < 3)
+            if (message.Values.Count < 4)
+            {
+                Debug.LogWarning($"[OscHitReceiver] Ignored malformed OSC hit. Expected 4 args, got {message.Values.Count}.");
                 return;
+            }
 
-            long tSamples = ReadInt64(message.Values[0]);
-            int pad = ReadInt32(message.Values[1]);
-            int vel = ReadInt32(message.Values[2]);
+            int tHigh = ReadInt32(message.Values[0]);
+            int tLow = ReadInt32(message.Values[1]);
+            int pad = ReadInt32(message.Values[2]);
+            int vel = ReadInt32(message.Values[3]);
+
+            long tSamples = CombineHighLowToInt64(tHigh, tLow);
 
             _lastSamples = tSamples;
             _hasLastSamples = true;
 
-
-            // Clamp velocity into MIDI-ish 0..127 (Bela might send wider if you choose later)
             vel = Mathf.Clamp(vel, 0, 127);
 
             _buffer.Add(new HitEvent(tSamples, pad, vel));
 
             if (logEveryNHits > 0 && (_buffer.Count % logEveryNHits) == 0)
             {
-                Debug.Log($"[OscHitReceiver] hits={_buffer.Count} last={tSamples} pad={pad} vel={vel}");
+                Debug.Log(
+                    $"[OscHitReceiver] hits={_buffer.Count} last={tSamples} " +
+                    $"(hi={tHigh}, lo={tLow}) pad={pad} vel={vel}"
+                );
             }
+        }
+
+        private static long CombineHighLowToInt64(int high, int low)
+        {
+            // low must be treated as unsigned bits when recombining
+            return ((long)high << 32) | (uint)low;
         }
 
         private static int ReadInt32(OSCValue v)
         {
-            // extOSC may encode ints as Int or Long depending on sender.
             switch (v.Type)
             {
-                case OSCValueType.Int: return v.IntValue;
-                case OSCValueType.Long: return (int)v.LongValue;
-                case OSCValueType.Float: return Mathf.RoundToInt(v.FloatValue);
-                default: return 0;
-            }
-        }
+                case OSCValueType.Int:
+                    return v.IntValue;
 
-        private static long ReadInt64(OSCValue v)
-        {
-            switch (v.Type)
-            {
-                case OSCValueType.Long: return v.LongValue;
-                case OSCValueType.Int: return v.IntValue;
-                case OSCValueType.Float: return (long)Mathf.RoundToInt(v.FloatValue);
-                default: return 0L;
+                case OSCValueType.Long:
+                    return (int)v.LongValue;
+
+                case OSCValueType.Float:
+                    return Mathf.RoundToInt(v.FloatValue);
+
+                default:
+                    return 0;
             }
         }
     }
