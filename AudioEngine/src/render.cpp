@@ -1,6 +1,8 @@
-#include <Bela.h>                         // Bela API, let's us read analog inputs, etc.
+#include <Bela.h>                           // Bela API, let's us read analog inputs, etc.
 #include <cmath>                          
 #include <algorithm>
+#include <libraries/OscSender/OscSender.h>  // Bela's built in OSC sender library
+#include <atomic>
 
 // ========== SSH RUN COMMAND ==========
 // ssh -tt root@bela.local "cd /root/Bela && make PROJECT=IT4 run"
@@ -14,6 +16,83 @@ static const float PEAK_WIN_MS = 8.0f;    // after a hit, watch signal for this 
 static const float REFRACT_MS = 25.0f;    // lockout to avoid double hits
 static const float VEL_GAIN = 4.0f;       // peak * gain -> velocity; scale to get good 0..1 range
 static const float BASE_ALPHA = 0.999f;   // noise floor; closer to 1 = slower baseline
+
+// ===== OSC target (Unity machine) =====
+static const char* TARGET_IP = "192.168.7.1";
+static const int TARGET_PORT = 7000;
+
+// ========== Bela OSC sender ==========
+OscSender gOscSender;
+
+// ========== one detected drum hit ==========
+struct HitEvent
+{
+    int64_t tSamples;
+    int32_t pad;
+    int32_t vel;
+};
+
+// ========== HitEvent queue for communicating between Bela's audio thread and OSC thread ==========
+static const unsigned int QUEUE_SIZE = 128;
+
+static HitEvent gQueue[QUEUE_SIZE];
+
+static std::atomic<unsigned int> gWriteIndex{0};
+static std::atomic<unsigned int> gReadIndex{0};
+
+// Add hit event to queue
+bool enqueueHit(const HitEvent& ev)
+{
+    unsigned int w = gWriteIndex.load();
+    unsigned int r = gReadIndex.load();
+
+    unsigned int next = (w + 1) % QUEUE_SIZE;
+
+    if(next == r)
+        return false; // queue full
+
+    gQueue[w] = ev;
+
+    gWriteIndex.store(next);
+
+    return true;
+}
+
+// Get hit event from queue
+bool dequeueHit(HitEvent& ev)
+{
+    unsigned int r = gReadIndex.load();
+    unsigned int w = gWriteIndex.load();
+
+    if(r == w)
+        return false; // empty
+
+    ev = gQueue[r];
+
+    gReadIndex.store((r + 1) % QUEUE_SIZE);
+
+    return true;
+}
+
+// ========== OSC SENDER THREAD ==========
+void oscSenderLoop(void*)
+{
+    while(!Bela_stopRequested())
+    {
+        HitEvent ev;
+
+        while(dequeueHit(ev))
+        {
+            gOscSender.newMessage("/it4/hit")
+                .add((int64_t)ev.tSamples)
+                .add((int32_t)ev.pad)
+                .add((int32_t)ev.vel)
+                .send();
+        }
+
+        usleep(1000);
+    }
+} // checks queue, sends OSC messages, sleeps for a bit, repeat
 
 // ========== STATE ==========
 static float gAnalogRate = 0.0f;          // Bela's analog sample rate
@@ -58,6 +137,14 @@ bool setup(BelaContext *context, void *userData)
   rt_printf("Piezo trigger ready: analogRate=%.1fHz peakWin=%d samples refract=%d samples\n",
             gAnalogRate, gPeakWinSamples, gRefractSamples);
   rt_printf("Tune: THRESH=%.4f DC_R=%.3f VEL_GAIN=%.2f\n", THRESH, DC_R, VEL_GAIN);
+
+  // Setup OSC sender
+  
+  gOscSender.setup(TARGET_PORT, TARGET_IP);
+  rt_printf("OSC sender ready -> %s:%d\n", TARGET_IP, TARGET_PORT);
+
+  Bela_runAuxiliaryTask(oscSenderLoop);
+  rt_printf("OSC sender thread started\n");
 
   return true;
 }
@@ -138,7 +225,21 @@ void render(BelaContext *context, void *userData)
         // Calculate hit time in seconds (approximation)
         double t = (context->audioFramesElapsed + n) / (double)context->audioSampleRate;
 
-        rt_printf("HIT t=%.6f vel=%.3f peak=%.5f base=%.5f\n", t, vel, gPeak, gBaseline);
+        // rt_printf("HIT t=%.6f vel=%.3f peak=%.5f base=%.5f\n", t, vel, gPeak, gBaseline);
+
+        // Create hit event and add to queue for OSC thread to send
+        int64_t tSamples = (int64_t)context->audioFramesElapsed + (int64_t)n;
+
+        int32_t midiVel = (int32_t)roundf(vel * 127.0f);
+
+        HitEvent ev;
+        ev.tSamples = tSamples;
+        ev.pad = 0;
+        ev.vel = midiVel;
+
+        enqueueHit(ev);
+
+        rt_printf("HIT samples=%lld vel=%d\n", (long long)tSamples, midiVel);
       }
     }
   }
