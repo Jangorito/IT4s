@@ -4,8 +4,14 @@ using extOSC;
 namespace IT4s.Input
 {
     /// <summary>
-    /// Sends fake Bela-style hit messages into an OSCTarget (typically your local OSCReceiver).
-    /// Use this to test the pipeline without hardware.
+    /// Sends fake Bela-style hit messages into an OSC target
+    /// (typically your local OSCReceiver).
+    ///
+    /// Message format:
+    /// /it4/hit <tHigh:int32> <tLow:int32> <pad:int32> <vel:int32>
+    ///
+    /// This matches the live Bela contract where the 64-bit sample timestamp
+    /// is split into two 32-bit integers.
     /// </summary>
     public class FakeBelaOscSender : MonoBehaviour
     {
@@ -17,12 +23,12 @@ namespace IT4s.Input
         [SerializeField] private int pad = 0;
         [SerializeField] private int minVel = 60;
         [SerializeField] private int maxVel = 110;
-        [SerializeField] private float hitsPerSecond = 4f; // 4 = quarter notes at 60bpm feel
+        [SerializeField] private float hitsPerSecond = 4f;
         [SerializeField] private bool sendOnStart = true;
 
-        // We'll emulate Bela sample-time
         [Header("Clock")]
         [SerializeField] private int sampleRate = 48000;
+
         private long _tSamples;
         private float _accum;
 
@@ -32,6 +38,7 @@ namespace IT4s.Input
             {
                 Debug.LogError("[FakeBelaOscSender] No OSCTransmitter assigned.");
                 enabled = false;
+                return;
             }
         }
 
@@ -41,48 +48,57 @@ namespace IT4s.Input
             _accum = 0f;
 
             if (sendOnStart)
-                SendHit(); // one immediate hit to prove wiring
+            {
+                SendHit();
+            }
 
-            Debug.Log("[FakeBelaOscSender] Started. Sending fake hits to " + transmitter.RemoteHost + ":" + transmitter.RemotePort);
+            Debug.Log($"[FakeBelaOscSender] Started. Sending fake hits to {transmitter.RemoteHost}:{transmitter.RemotePort}");
         }
 
         private void Update()
         {
-            // advance sample clock
+            // Advance fake Bela sample clock
             _tSamples += (long)(sampleRate * Time.deltaTime);
 
-            if (hitsPerSecond <= 0f) return;
-
-            _accum += Time.deltaTime;
-            float interval = 1f / hitsPerSecond;
-
-            while (_accum >= interval)
+            if (hitsPerSecond > 0f)
             {
-                _accum -= interval;
-                SendHit();
+                _accum += Time.deltaTime;
+                float interval = 1f / hitsPerSecond;
+
+                while (_accum >= interval)
+                {
+                    _accum -= interval;
+                    SendHit();
+                }
             }
 
-            // Manual trigger: space bar
-            if (UnityEngine.Input.GetKeyDown(KeyCode.Space))
-                SendHit();
+            // Manual trigger
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Space)) SendHit();
         }
 
         private void SendHit()
         {
             int vel = Random.Range(minVel, maxVel + 1);
+            vel = Mathf.Clamp(vel, 0, 127);
+
+            SplitInt64(_tSamples, out int tHigh, out int tLow);
 
             var msg = new OSCMessage(address);
-
-            // IMPORTANT: extOSC value types.
-            // Use Long for tSamples (int64), Int for pad/vel (int32).
-            msg.AddValue(OSCValue.Long(_tSamples));
+            msg.AddValue(OSCValue.Int(tHigh));
+            msg.AddValue(OSCValue.Int(tLow));
             msg.AddValue(OSCValue.Int(pad));
             msg.AddValue(OSCValue.Int(vel));
 
             transmitter.Send(msg);
 
-            // Optional local log
-            // Debug.Log($"[FakeBelaOscSender] sent t={_tSamples} pad={pad} vel={vel}");
+            // Optional debug
+            // Debug.Log($"[FakeBelaOscSender] sent t={_tSamples} hi={tHigh} lo={tLow} pad={pad} vel={vel}");
+        }
+
+        private static void SplitInt64(long value, out int high, out int low)
+        {
+            high = (int)(value >> 32);
+            low = (int)(value & 0xFFFFFFFF);
         }
     }
 }
