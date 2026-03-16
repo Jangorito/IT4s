@@ -1,0 +1,229 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using IT4s.Data;
+
+namespace IT4s.Rhythm.Transformations
+{
+    public static class FeatureTransformer
+    {
+        public enum Mode
+        {
+            Auto,
+            EchoAccent,
+            EndFill,
+            SparseOrnament
+        }
+
+        public struct PatternFeatures
+        {
+            public int stepCount;
+            public int activeSteps;
+            public float density;
+            public int maxVelocity;
+            public float meanVelocity;
+            public List<int> onsetIndices;
+
+            // Gap detection fields
+            public List<int> gapAfterOnset;
+            public int maxGap;
+            public float meanGap;
+        }
+
+        public static PatternTurn Transform(PatternTurn src, Mode mode = Mode.Auto)
+        {
+            PatternFeatures features = Analyse(src);
+
+            return mode switch
+            {
+                Mode.EchoAccent => EchoAccent(src, features),
+                Mode.EndFill => EndFill(src, features),
+                Mode.SparseOrnament => SparseOrnament(src, features),
+                Mode.Auto => AutoTransform(src, features),
+                _ => src
+            };
+        }
+
+        public static PatternFeatures Analyse(PatternTurn pattern)
+        {
+            var onsets = new List<int>();   // list of step indices where hits occur
+            var gaps = new List<int>();     // list of gap lengths between hits
+
+            
+            int active = 0;                 // number of hits
+            int maxVel = 0;                 
+            int velSum = 0;
+            int maxGap = 0;
+            int gapSum = 0;
+
+        
+            for (int i = 0; i < pattern.StepCount; i++)
+            {
+                int vel = pattern.velocity[i];
+                if (vel > 0)
+                {
+                    active++;
+                    onsets.Add(i);
+                    velSum += vel;
+
+                    if (vel > maxVel)
+                        maxVel = vel;
+                }
+            }
+
+            // Calculate gap lengths
+            for (int i = 0; i < onsets.Count - 1; i++)
+            {
+                int gap = onsets[i + 1] - onsets[i] - 1;
+                gaps.Add(Mathf.Max(0, gap));
+            }
+
+            if (onsets.Count > 0)
+            {
+                int trailingGap = pattern.StepCount - 1 - onsets[onsets.Count - 1];
+                gaps.Add(Mathf.Max(0, trailingGap));
+            }
+
+            // calculate density and mean velocity without dividing by zero
+            float density = pattern.StepCount > 0
+                ? (float)active / pattern.StepCount
+                : 0f;            
+            float meanVelocity = active > 0
+                ? (float)velSum / active
+                : 0f;
+
+
+            foreach (int gap in gaps)
+            {
+                gapSum += gap;
+                if (gap > maxGap)
+                    maxGap = gap;
+            }
+
+            float meanGap = gaps.Count > 0
+                ? (float)gapSum / gaps.Count
+                : 0f;
+                
+            return new PatternFeatures
+            {
+                stepCount = pattern.StepCount,
+                activeSteps = active,
+                density = density,
+                maxVelocity = maxVel,
+                meanVelocity = meanVelocity,
+                onsetIndices = onsets,
+                gapAfterOnset = gaps,
+                maxGap = maxGap,
+                meanGap = meanGap
+            };
+        }
+
+        private static PatternTurn AutoTransform(PatternTurn pattern, PatternFeatures features)
+        {
+            if (features.activeSteps == 0)
+                return pattern;
+
+            if (features.maxGap < 6)
+                return SparseOrnament(pattern, features);
+
+            if (features.meanGap < 3f)
+                return EchoAccent(pattern, features);
+
+            return EndFill(pattern, features);
+        }
+
+        private static PatternTurn EchoAccent(PatternTurn pattern, PatternFeatures features)
+        {
+            var output = ClonePattern(pattern);
+
+            int accentThreshold = Mathf.RoundToInt(features.maxVelocity * 0.8f);
+
+            for (int i = 0; i < pattern.StepCount; i++)
+            {
+                int vel = pattern.velocity[i];
+                if (vel <= 0) continue;
+                if (vel < accentThreshold) continue;
+
+                int echoIndex = i + 3;
+                if (echoIndex >= pattern.StepCount) continue;
+
+                if (output.velocity[echoIndex] == 0)
+                {
+                    output.velocity[echoIndex] = Mathf.RoundToInt(vel * 0.7f);
+                    output.offsetSamples[echoIndex] = 0;
+                }
+            }
+
+            return output;
+        }
+
+        private static PatternTurn EndFill(PatternTurn pattern, PatternFeatures features)
+        {
+            var output = ClonePattern(pattern);
+
+            int start = Mathf.FloorToInt(pattern.StepCount * 0.75f);
+            int activeInEnd = 0;
+
+            for (int i = start; i < pattern.StepCount; i++)
+            {
+                if (output.velocity[i] > 0)
+                    activeInEnd++;
+            }
+
+            if (activeInEnd <= 2)
+            {
+                int[] fillSteps = { pattern.StepCount - 6, pattern.StepCount - 3, pattern.StepCount - 1 };
+
+                foreach (int step in fillSteps)
+                {
+                    if (step >= 0 && step < pattern.StepCount && output.velocity[step] == 0)
+                    {
+                        output.velocity[step] = Mathf.RoundToInt(Mathf.Max(60f, features.meanVelocity));
+                        output.offsetSamples[step] = 0;
+                    }
+                }
+            }
+
+            return output;
+        }
+
+        private static PatternTurn SparseOrnament(PatternTurn pattern, PatternFeatures features)
+{
+        var output = ClonePattern(pattern);
+
+        for (int i = 0; i < features.onsetIndices.Count; i++)
+        {
+            int onset = features.onsetIndices[i];
+            int gapAfter = i < features.gapAfterOnset.Count ? features.gapAfterOnset[i] : 0;
+
+            // Skip dense hits
+            if (gapAfter < 2)
+                continue;
+
+            int ornamentStep = onset + 1;
+            if (ornamentStep >= pattern.StepCount)
+                continue;
+
+            if (output.velocity[ornamentStep] == 0)
+            {
+                output.velocity[ornamentStep] = Mathf.RoundToInt(pattern.velocity[onset] * 0.6f);
+                output.offsetSamples[ornamentStep] = 0;
+            }
+        }
+
+    return output;
+}
+
+        private static PatternTurn ClonePattern(PatternTurn src)
+        {
+            PatternTurn clone = src;
+            clone.velocity = new int[src.velocity.Length];
+            clone.offsetSamples = new int[src.offsetSamples.Length];
+
+            Array.Copy(src.velocity, clone.velocity, src.velocity.Length);
+            Array.Copy(src.offsetSamples, clone.offsetSamples, src.offsetSamples.Length);
+
+            return clone;
+        }
+    }
+}
