@@ -12,7 +12,7 @@
 // ========== Parameters to tune ==========
 static const int   PIEZO_CH = 0;          // analog in channel (A0), the physical pin on Bela
 static const float DC_R = 0.99f;          // DC offset filter coefficient, closer to 1 = slower
-static const float THRESH = 0.01f;        // minimum hit level after DC removal and baseline
+static const float THRESH = 0.001f;        // minimum hit level after DC removal and baseline
 static const float PEAK_WIN_MS = 8.0f;    // after a hit, watch signal for this long to find peak and measure velocity
 static const float REFRACT_MS = 25.0f;    // lockout to avoid double hits
 static const float VEL_GAIN = 4.0f;       // peak * gain -> velocity; scale to get good 0..1 range
