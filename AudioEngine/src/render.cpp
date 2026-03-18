@@ -19,8 +19,11 @@ static const float VEL_GAIN = 6.0f;       // peak * gain -> velocity; scale to g
 static const float BASE_ALPHA = 0.999f;   // noise floor; closer to 1 = slower baseline
 
 // ===== OSC target (Unity machine) =====
-static const char* TARGET_IP = "192.168.7.1";
-static const int TARGET_PORT = 7000;
+static const char* TARGET_IP = "10.10.9.218";
+static const int TARGET_PORT = 9000;
+
+// static const char* TARGET_IP = "192.168.7.1";
+// static const int TARGET_PORT = 7000;
 
 // ========== Bela OSC sender ==========
 OscSender gOscSender;

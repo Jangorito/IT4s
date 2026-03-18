@@ -45,6 +45,8 @@ namespace IT4s.Input
                 enabled = false;
                 return;
             }
+
+            Debug.Log($"[OscHitReceiver] Listening on address={address}");
         }
 
         private void OnEnable()
