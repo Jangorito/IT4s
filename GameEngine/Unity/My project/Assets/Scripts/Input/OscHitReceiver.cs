@@ -23,7 +23,7 @@ namespace IT4s.Input
         [SerializeField] private string address = "/it4/hit";
 
         [Header("Buffer")]
-        [SerializeField] private int logEveryNHits = 25;
+        [SerializeField] private int logEveryNHits = 1;
 
         private HitBuffer _buffer;
         private IOSCBind _hitBind;   // <-- store bind handle
