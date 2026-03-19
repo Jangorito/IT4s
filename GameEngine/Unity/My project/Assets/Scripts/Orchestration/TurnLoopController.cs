@@ -524,9 +524,8 @@ namespace IT4s.Orchestration
             lastTurnWindow = turnWindow;
             hasLastTurnWindow = true;
 
-            int hitCount = CountHitsInWindow(turnWindow);
             EmitDebugMessage(
-                $"Human turn ended at sample {turnWindow.endSamples}. Window={turnWindow.turnId}, hits={hitCount}.");
+                $"Human turn ended at sample {turnWindow.endSamples}. Window={turnWindow.turnId}, hits={turnWindow.HitCount}.");
 
             SetPhase(TurnPhase.CompilingHumanTurn);
         }
@@ -547,7 +546,8 @@ namespace IT4s.Orchestration
             else
             {
                 EmitDebugMessage(
-                    $"CompilingHumanTurn placeholder reached for turn {lastTurnWindow.turnId}. " +
+                    $"CompilingHumanTurn placeholder reached for turn {lastTurnWindow.turnId} " +
+                    $"with {lastTurnWindow.HitCount} captured hits. " +
                     "Compilation is intentionally deferred to a later chunk.");
             }
 
@@ -565,18 +565,6 @@ namespace IT4s.Orchestration
             }
 
             return hitReceiver.TryGetCurrentSampleTime(out currentSamples);
-        }
-
-        private int CountHitsInWindow(TurnWindow turnWindow)
-        {
-            ResolveReceiverReference();
-
-            if (hitReceiver == null || hitReceiver.Buffer == null)
-            {
-                return 0;
-            }
-
-            return hitReceiver.Buffer.Slice(turnWindow.startSamples, turnWindow.endSamples).Count;
         }
 
         private void ClearActiveTurnState()

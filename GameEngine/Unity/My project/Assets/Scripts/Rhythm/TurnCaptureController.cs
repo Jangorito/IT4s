@@ -96,24 +96,25 @@ namespace IT4s.Rhythm
                 return false;
             }
 
-            turnWindow = _turnManager.EndTurn(endSamples);
-            var hits = hitReceiver.Buffer.Slice(turnWindow.startSamples, turnWindow.endSamples);
+            _turnManager.EndTurn(endSamples, out int turnId, out long startSamples);
+            var hits = hitReceiver.Buffer.Slice(startSamples, endSamples);
+            turnWindow = new TurnWindow(turnId, startSamples, endSamples, hits);
 
             Debug.Log(
                 $"[TurnCaptureController] End capture for turn {turnWindow.turnId} at {endSamples} samples " +
-                $"with {hits.Count} hits in window.");
+                $"with {turnWindow.HitCount} hits in window.");
 
             if (logHitsInTurn)
             {
-                int n = Mathf.Min(hits.Count, maxHitLogs);
+                int n = Mathf.Min(turnWindow.HitCount, maxHitLogs);
                 for (int i = 0; i < n; i++)
                 {
-                    Debug.Log($"  {hits[i]}");
+                    Debug.Log($"  {turnWindow.Hits[i]}");
                 }
 
-                if (hits.Count > n)
+                if (turnWindow.HitCount > n)
                 {
-                    Debug.Log($"  ... +{hits.Count - n} more");
+                    Debug.Log($"  ... +{turnWindow.HitCount - n} more");
                 }
             }
 

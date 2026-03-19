@@ -1,17 +1,15 @@
 using System;
-using System.Collections.Generic;
 using IT4s.Data;
 
 namespace IT4s.Rhythm
 {
     /// <summary>
-    /// Compiles a TurnWindow + raw HitEvents into a fixed-BPM quantised pattern.
+    /// Compiles a raw captured TurnWindow into a fixed-BPM quantised pattern.
     /// </summary>
     public class PatternCompiler
     {
         public PatternTurn Compile(
             TurnWindow window,
-            List<HitEvent> hits,
             QuantisationSettings q)
         {
             // seconds per quarter note
@@ -35,7 +33,7 @@ namespace IT4s.Rhythm
             for (int i = 0; i < stepCount; i++)
                 offsetSamples[i] = 0;
 
-            foreach (var h in hits)
+            foreach (var h in window.Hits)
             {
                 // time relative to window start (in samples)
                 long relSamples = h.tSamples - window.startSamples;

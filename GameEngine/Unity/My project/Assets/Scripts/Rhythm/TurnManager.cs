@@ -1,4 +1,3 @@
-using IT4s.Data;
 using UnityEngine;
 
 namespace IT4s.Rhythm
@@ -30,19 +29,18 @@ namespace IT4s.Rhythm
         }
 
         /// <summary>
-        /// Ends the active turn and returns the resulting TurnWindow.
+        /// Ends the active turn and returns the resulting timing metadata.
         /// </summary>
-        public TurnWindow EndTurn(long endSamples)
+        public void EndTurn(long endSamples, out int turnId, out long startSamples)
         {
             Debug.Log($"[TurnManager] Ending turn {_nextTurnId} at {endSamples} samples");
 
-            var window = new TurnWindow(_nextTurnId, _startSamples, endSamples);
+            turnId = _nextTurnId;
+            startSamples = _startSamples;
 
             _isActive = false;
             _startSamples = 0;
             _nextTurnId++;
-
-            return window;
         }
 
         /// <summary>
