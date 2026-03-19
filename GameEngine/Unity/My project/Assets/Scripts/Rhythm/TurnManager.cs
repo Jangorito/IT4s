@@ -16,6 +16,7 @@ namespace IT4s.Rhythm
 
         public bool IsActive => _isActive;
         public int CurrentTurnId => _nextTurnId;
+        public long ActiveStartSamples => _startSamples;
 
         /// <summary>
         /// Starts a new turn at the given sample time.
@@ -38,9 +39,26 @@ namespace IT4s.Rhythm
             var window = new TurnWindow(_nextTurnId, _startSamples, endSamples);
 
             _isActive = false;
+            _startSamples = 0;
             _nextTurnId++;
 
             return window;
+        }
+
+        /// <summary>
+        /// Cancels the current turn without producing a TurnWindow.
+        /// </summary>
+        public void CancelTurn()
+        {
+            if (!_isActive)
+            {
+                return;
+            }
+
+            Debug.Log($"[TurnManager] Cancelling turn {_nextTurnId} that started at {_startSamples} samples");
+
+            _isActive = false;
+            _startSamples = 0;
         }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using IT4s.Data;
 
@@ -25,15 +26,20 @@ namespace IT4s.Input
         [Header("Buffer")]
         [SerializeField] private int logEveryNHits = 1;
 
+        [Header("Clock")]
+        [SerializeField] private int sampleRate = 48000;
+
         private HitBuffer _buffer;
         private IOSCBind _hitBind;   // <-- store bind handle
         public HitBuffer Buffer => _buffer;
 
         private long _lastSamples;
         private bool _hasLastSamples;
+        private double _lastSampleRealtimeSeconds;
 
         public bool HasLastSamples => _hasLastSamples;
         public long LastSamples => _lastSamples;
+        public event Action<HitEvent> OnHitReceived;
 
         private void Awake()
         {
@@ -51,11 +57,21 @@ namespace IT4s.Input
 
         private void OnEnable()
         {
+            if (receiver == null)
+            {
+                return;
+            }
+
             _hitBind = receiver.Bind(address, OnHitMessage);
         }
 
         private void OnDisable()
         {
+            if (receiver == null)
+            {
+                return;
+            }
+
             if (_hitBind != null)
             {
                 receiver.Unbind(_hitBind);
@@ -86,10 +102,13 @@ namespace IT4s.Input
 
             _lastSamples = tSamples;
             _hasLastSamples = true;
+            _lastSampleRealtimeSeconds = Time.realtimeSinceStartup;
 
             vel = Mathf.Clamp(vel, 0, 127);
 
-            _buffer.Add(new HitEvent(tSamples, pad, vel));
+            var hitEvent = new HitEvent(tSamples, pad, vel);
+            _buffer.Add(hitEvent);
+            OnHitReceived?.Invoke(hitEvent);
 
             if (logEveryNHits > 0 && (_buffer.Count % logEveryNHits) == 0)
             {
@@ -122,6 +141,19 @@ namespace IT4s.Input
                 default:
                     return 0;
             }
+        }
+
+        public bool TryGetCurrentSampleTime(out long currentSamples)
+        {
+            if (!_hasLastSamples)
+            {
+                currentSamples = 0;
+                return false;
+            }
+
+            float elapsedSeconds = Mathf.Max(0f, Time.realtimeSinceStartup - (float)_lastSampleRealtimeSeconds);
+            currentSamples = _lastSamples + (long)(elapsedSeconds * sampleRate);
+            return true;
         }
     }
 }
