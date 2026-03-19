@@ -31,7 +31,11 @@ namespace IT4s.Rhythm
 
         private TurnManager _turnManager;
         private PatternCompiler _compiler;
-        // private SimpleTransformer _transformer;
+        // FeatureTransformer conceptually belongs in the higher-level orchestration layer.
+        // For now, while TurnLoopController is not yet composing the full graph, this controller
+        // creates a concrete instance so transformation is still an explicit collaborator rather
+        // than a static call hidden inside capture logic.
+        private FeatureTransformer _featureTransformer;
 
 
         // "now" = latest Bela sample time observed.
@@ -42,6 +46,9 @@ namespace IT4s.Rhythm
         {
             _turnManager = new TurnManager();
             _compiler = new PatternCompiler();
+            // Practical interim composition: keep the dependency explicit today without adding
+            // a DI framework. A future composition root or TurnLoopController can inject this.
+            _featureTransformer = new FeatureTransformer();
 
 
             if (hitReceiver == null)
@@ -160,7 +167,9 @@ namespace IT4s.Rhythm
             // turnPlayer.Play(pattern);
             // SimpleTransformer.Transform(pattern, SimpleTransformer.Mode.Triplah);
             // var ai = SimpleTransformer.Transform(pattern, SimpleTransformer.Mode.Triplets);
-            var ai = FeatureTransformer.Transform(pattern, FeatureTransformer.Mode.Auto);
+            // Temporary placement: transformation is still happening here until orchestration
+            // moves fully into TurnLoopController, but it now does so through a real collaborator.
+            var ai = _featureTransformer.Transform(pattern, FeatureTransformer.Mode.Auto);
 
             turnPlayer.Play(ai);
 

@@ -6,10 +6,11 @@ using IT4s.Data;
 namespace IT4s.Rhythm.Transformations
 {
     /// <summary>
-    /// Rhythmic transformation utility used to derive a machine response from a human pattern.
-    /// The class is intentionally non-static even though the current helpers remain static:
-    /// this allows the orchestration layer to hold a FeatureTransformer reference now and evolve
-    /// toward injected, configurable transformation behaviour in later chunks without renaming it.
+    /// Rhythmic transformation collaborator used to derive a machine response from a human pattern.
+    /// Its public API is instance-based so higher-level controllers can treat it as a real dependency
+    /// rather than a static utility. Private helper methods remain static where that keeps the
+    /// transformation logic simple, but callers now work with a FeatureTransformer object that can
+    /// later be injected by the orchestration layer without renaming or redesigning this class.
     /// </summary>
     public class FeatureTransformer
     {
@@ -36,7 +37,12 @@ namespace IT4s.Rhythm.Transformations
             public float meanGap;
         }
 
-        public static PatternTurn Transform(PatternTurn src, Mode mode = Mode.Auto)
+        /// <summary>
+        /// Derives a transformed pattern from the source material using the requested mode.
+        /// Making this instance-based supports the TurnLoopController architecture, where the
+        /// transformer should appear as an explicit collaborator in orchestration.
+        /// </summary>
+        public PatternTurn Transform(PatternTurn src, Mode mode = Mode.Auto)
         {
             PatternFeatures features = Analyse(src);
 
@@ -50,19 +56,21 @@ namespace IT4s.Rhythm.Transformations
             };
         }
 
-        public static PatternFeatures Analyse(PatternTurn pattern)
+        /// <summary>
+        /// Extracts lightweight rhythmic features used by the transformation rules.
+        /// This is also instance-based so callers can depend on a transformer object consistently.
+        /// </summary>
+        public PatternFeatures Analyse(PatternTurn pattern)
         {
             var onsets = new List<int>();   // list of step indices where hits occur
             var gaps = new List<int>();     // list of gap lengths between hits
 
-            
             int active = 0;                 // number of hits
-            int maxVel = 0;                 
+            int maxVel = 0;
             int velSum = 0;
             int maxGap = 0;
             int gapSum = 0;
 
-        
             for (int i = 0; i < pattern.StepCount; i++)
             {
                 int vel = pattern.velocity[i];
@@ -93,11 +101,10 @@ namespace IT4s.Rhythm.Transformations
             // calculate density and mean velocity without dividing by zero
             float density = pattern.StepCount > 0
                 ? (float)active / pattern.StepCount
-                : 0f;            
+                : 0f;
             float meanVelocity = active > 0
                 ? (float)velSum / active
                 : 0f;
-
 
             foreach (int gap in gaps)
             {
@@ -109,7 +116,7 @@ namespace IT4s.Rhythm.Transformations
             float meanGap = gaps.Count > 0
                 ? (float)gapSum / gaps.Count
                 : 0f;
-                
+
             return new PatternFeatures
             {
                 stepCount = pattern.StepCount,
@@ -194,31 +201,31 @@ namespace IT4s.Rhythm.Transformations
         }
 
         private static PatternTurn SparseOrnament(PatternTurn pattern, PatternFeatures features)
-{
-        var output = ClonePattern(pattern);
-
-        for (int i = 0; i < features.onsetIndices.Count; i++)
         {
-            int onset = features.onsetIndices[i];
-            int gapAfter = i < features.gapAfterOnset.Count ? features.gapAfterOnset[i] : 0;
+            var output = ClonePattern(pattern);
 
-            // Skip dense hits
-            if (gapAfter < 2)
-                continue;
-
-            int ornamentStep = onset + 1;
-            if (ornamentStep >= pattern.StepCount)
-                continue;
-
-            if (output.velocity[ornamentStep] == 0)
+            for (int i = 0; i < features.onsetIndices.Count; i++)
             {
-                output.velocity[ornamentStep] = Mathf.RoundToInt(pattern.velocity[onset] * 0.6f);
-                output.offsetSamples[ornamentStep] = 0;
-            }
-        }
+                int onset = features.onsetIndices[i];
+                int gapAfter = i < features.gapAfterOnset.Count ? features.gapAfterOnset[i] : 0;
 
-    return output;
-}
+                // Skip dense hits
+                if (gapAfter < 2)
+                    continue;
+
+                int ornamentStep = onset + 1;
+                if (ornamentStep >= pattern.StepCount)
+                    continue;
+
+                if (output.velocity[ornamentStep] == 0)
+                {
+                    output.velocity[ornamentStep] = Mathf.RoundToInt(pattern.velocity[onset] * 0.6f);
+                    output.offsetSamples[ornamentStep] = 0;
+                }
+            }
+
+            return output;
+        }
 
         private static PatternTurn ClonePattern(PatternTurn src)
         {
