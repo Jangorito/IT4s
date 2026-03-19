@@ -5,7 +5,13 @@ using IT4s.Data;
 
 namespace IT4s.Rhythm.Transformations
 {
-    public static class FeatureTransformer
+    /// <summary>
+    /// Rhythmic transformation utility used to derive a machine response from a human pattern.
+    /// The class is intentionally non-static even though the current helpers remain static:
+    /// this allows the orchestration layer to hold a FeatureTransformer reference now and evolve
+    /// toward injected, configurable transformation behaviour in later chunks without renaming it.
+    /// </summary>
+    public class FeatureTransformer
     {
         public enum Mode
         {
