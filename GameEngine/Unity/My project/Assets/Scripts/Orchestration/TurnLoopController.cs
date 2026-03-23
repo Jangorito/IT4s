@@ -48,6 +48,8 @@ namespace IT4s.Orchestration
         /// A terminal or recoverable failure state that keeps orchestration observable.
         /// </summary>
         Error
+
+        // TODO: Debugging mode phase that plays captured turn before generating a response
     }
 
     /// <summary>
