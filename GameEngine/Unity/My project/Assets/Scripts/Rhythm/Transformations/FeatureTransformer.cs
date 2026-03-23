@@ -247,12 +247,32 @@ namespace IT4s.Rhythm.Transformations
 
         private static PatternTurn ClonePattern(PatternTurn src)
         {
-            PatternTurn clone = src;
-            clone.velocity = new int[src.velocity.Length];
-            clone.offsetSamples = new int[src.offsetSamples.Length];
+            if (src == null)
+            {
+                throw new ArgumentNullException(nameof(src));
+            }
 
-            Array.Copy(src.velocity, clone.velocity, src.velocity.Length);
-            Array.Copy(src.offsetSamples, clone.offsetSamples, src.offsetSamples.Length);
+            var clone = new PatternTurn
+            {
+                turnId = src.turnId,
+                bpm = src.bpm,
+                stepsPerQuarter = src.stepsPerQuarter,
+                sampleRate = src.sampleRate,
+                startSamples = src.startSamples,
+                endSamples = src.endSamples,
+                velocity = src.velocity != null ? new int[src.velocity.Length] : null,
+                offsetSamples = src.offsetSamples != null ? new int[src.offsetSamples.Length] : null
+            };
+
+            if (src.velocity != null)
+            {
+                Array.Copy(src.velocity, clone.velocity, src.velocity.Length);
+            }
+
+            if (src.offsetSamples != null)
+            {
+                Array.Copy(src.offsetSamples, clone.offsetSamples, src.offsetSamples.Length);
+            }
 
             return clone;
         }
