@@ -15,9 +15,18 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
     private bool ready;
     private Chuck.IntCallback readyCb;
 
+    public bool IsReady => ready;
+
     private void Awake()
     {
         if (!chuck) chuck = GetComponent<ChuckMainInstance>();
+
+        if (!chuck)
+        {
+            Debug.LogError("[IT4] No ChuckMainInstance found on IT4ChuckTurnPlayer.");
+            enabled = false;
+            return;
+        }
 
         readyCb = chuck.CreateGetIntCallback((long v) =>
         {
@@ -27,6 +36,8 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
 
     private void Start()
     {
+        if (!enabled) return;
+
         chuck.RunFile(chuckFile);
         StartCoroutine(PollReady());
     }
@@ -47,19 +58,53 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
         metronomeOnPlayback = enabled;
     }
 
-    public void Play(PatternTurn turn)
+    public void PlayTurn(PatternTurn turn, bool? metronomeOverride = null)
     {
-        if (!ready || turn == null || turn.velocity == null || turn.offsetSamples == null)
+        if (!ready)
+        {
+            Debug.LogWarning("[IT4] ChucK TurnPlayer not ready yet.");
             return;
+        }
+
+        if (turn == null || turn.velocity == null || turn.offsetSamples == null)
+        {
+            Debug.LogWarning("[IT4] Cannot play null or incomplete PatternTurn.");
+            return;
+        }
 
         int stepCount = Math.Min(turn.velocity.Length, turn.offsetSamples.Length);
+        if (stepCount <= 0)
+        {
+            Debug.LogWarning("[IT4] Cannot play PatternTurn with no steps.");
+            return;
+        }
+
+        if (turn.velocity.Length != turn.offsetSamples.Length)
+        {
+            Debug.LogWarning(
+                $"[IT4] PatternTurn {turn.turnId} has mismatched arrays: " +
+                $"velocity={turn.velocity.Length}, offsetSamples={turn.offsetSamples.Length}. " +
+                $"Truncating to {stepCount}."
+            );
+        }
+
+        if (turn.bpm <= 0)
+        {
+            Debug.LogWarning($"[IT4] Invalid BPM on PatternTurn {turn.turnId}: {turn.bpm}");
+            return;
+        }
+
+        if (turn.sampleRate <= 0)
+        {
+            Debug.LogWarning($"[IT4] Invalid sampleRate on PatternTurn {turn.turnId}: {turn.sampleRate}");
+            return;
+        }
+
         int safeStepsPerQuarter = Mathf.Max(1, turn.stepsPerQuarter);
 
-        // EXACTLY matches PatternCompiler math
         double secPerQuarter = 60.0 / turn.bpm;
         double secPerStep = secPerQuarter / safeStepsPerQuarter;
         double samplesPerStepD = secPerStep * turn.sampleRate;
-
         int samplesPerStep = Math.Max(1, (int)Math.Round(samplesPerStepD));
 
         long[] vel = new long[stepCount];
@@ -71,11 +116,13 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
             off[i] = turn.offsetSamples[i];
         }
 
+        bool useMetronome = metronomeOverride ?? metronomeOnPlayback;
+
         bool ok = true;
         ok &= chuck.SetInt("stepCount", stepCount);
         ok &= chuck.SetInt("samplesPerStep", samplesPerStep);
         ok &= chuck.SetInt("stepsPerQuarter", safeStepsPerQuarter);
-        ok &= chuck.SetInt("metronomeEnabled", metronomeOnPlayback ? 1 : 0);
+        ok &= chuck.SetInt("metronomeEnabled", useMetronome ? 1 : 0);
         ok &= chuck.SetIntArray_AT("velocity", vel);
         ok &= chuck.SetIntArray_AT("offsetSamples", off);
 
@@ -86,6 +133,10 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
         }
 
         chuck.BroadcastEvent("playTurn");
-        Debug.Log($"[IT4] Broadcasted 'playTurn' turn={turn.turnId} steps={stepCount} metronome={(metronomeOnPlayback ? "on" : "off")}");
+        Debug.Log(
+            $"[IT4] Broadcasted 'playTurn' turn={turn.turnId} " +
+            $"steps={stepCount} samplesPerStep={samplesPerStep} " +
+            $"metronome={(useMetronome ? "on" : "off")}"
+        );
     }
 }

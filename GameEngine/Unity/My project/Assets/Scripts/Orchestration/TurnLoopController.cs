@@ -78,6 +78,7 @@ namespace IT4s.Orchestration
         [SerializeField]
         [Tooltip("Fixed capture duration for the human turn in Bela samples.")]
         private int fixedHumanTurnDurationSamples = 192000;
+        // check whether this was computed with the correct sample rate: 4 seconds * 44100 samples/second = 176400 samples, so 192000 is a safe buffer above that.
 
         [Header("Debug Start Gate")]
         [SerializeField]
@@ -426,6 +427,12 @@ namespace IT4s.Orchestration
                 return false;
             }
 
+            if (aiTurnPlayer == null)
+            {
+                MoveToError("Turn loop cannot start because IT4ChuckTurnPlayer is missing.");
+                return false;
+            }
+
             return true;
         }
 
@@ -628,8 +635,23 @@ namespace IT4s.Orchestration
                 EmitDebugMessage(
                     $"AI response generation succeeded for turn {generatedAiPattern.turnId}. " +
                     $"Steps={generatedAiPattern.StepCount}, sampleRate={generatedAiPattern.sampleRate}.");
+
+                if (aiTurnPlayer == null)
+                {
+                    MoveToError("GeneratingAiResponse failed because IT4ChuckTurnPlayer reference is missing.");
+                    return;
+                }
+
+                if (!aiTurnPlayer.IsReady)
+                {
+                    MoveToError("GeneratingAiResponse failed because IT4ChuckTurnPlayer is not ready.");
+                    return;
+                }
+
+                EmitDebugMessage($"Triggering AI playback for turn {lastGeneratedAiPatternTurn.turnId}.");
+                aiTurnPlayer.PlayTurn(lastGeneratedAiPatternTurn);
                 EmitDebugMessage(
-                    $"AI response pattern stored for playback for turn {generatedAiPattern.turnId}. Advancing to PlayingAiResponse.");
+                    $"AI playback triggered for turn {lastGeneratedAiPatternTurn.turnId}. Advancing to PlayingAiResponse.");
 
                 SetPhase(TurnPhase.PlayingAiResponse);
             }
