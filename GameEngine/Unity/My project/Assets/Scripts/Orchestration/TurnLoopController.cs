@@ -111,6 +111,8 @@ namespace IT4s.Orchestration
         private long endSamples = -1;
         private TurnWindow lastTurnWindow;
         private bool hasLastTurnWindow;
+        private PatternTurn lastCompiledPatternTurn;
+        private bool hasLastCompiledPatternTurn;
         private bool compilingPlaceholderLogged;
         private bool captureClockWarningIssued;
         private OscHitReceiver subscribedHitReceiver;
@@ -188,7 +190,7 @@ namespace IT4s.Orchestration
             }
 
             isRunning = true;
-            ClearActiveTurnState();
+            ClearCaptureRuntimeState();
             EmitDebugMessage($"Turn loop started. {DescribeDependencyState()}");
             SetPhase(TurnPhase.WaitingForHuman);
         }
@@ -211,7 +213,7 @@ namespace IT4s.Orchestration
             }
 
             isRunning = false;
-            ClearActiveTurnState();
+            ClearCaptureRuntimeState();
             SetPhase(TurnPhase.Transition);
             EmitDebugMessage("Turn loop stopped.");
         }
@@ -532,26 +534,50 @@ namespace IT4s.Orchestration
 
         private void TickCompilingHumanTurn()
         {
-            if (compilingPlaceholderLogged)
+            if (!hasLastTurnWindow)
             {
-                ClearActiveTurnState();
-                SetPhase(TurnPhase.WaitingForHuman);
+                MoveToError("CompilingHumanTurn failed because no TurnWindow was available.");
                 return;
             }
 
-            if (!hasLastTurnWindow)
+            if (patternCompiler == null)
             {
-                Debug.LogWarning("[TurnLoopController] CompilingHumanTurn placeholder reached without a stored TurnWindow.");
-            }
-            else
-            {
-                EmitDebugMessage(
-                    $"CompilingHumanTurn placeholder reached for turn {lastTurnWindow.turnId} " +
-                    $"with {lastTurnWindow.HitCount} captured hits. " +
-                    "Compilation is intentionally deferred to a later chunk.");
+                MoveToError("CompilingHumanTurn failed because PatternCompiler reference is missing.");
+                return;
             }
 
-            compilingPlaceholderLogged = true;
+            EmitDebugMessage($"Compiling human turn {lastTurnWindow.turnId} with {lastTurnWindow.HitCount} hits.");
+
+            try
+            {
+                var q = new QuantisationSettings
+                {
+                    bpm = 120f,
+                    stepsPerQuarter = 12,
+                    sampleRate = 48000
+                };
+
+                var compiled = patternCompiler.Compile(lastTurnWindow, q);
+
+                if (compiled == null)
+                {
+                    MoveToError($"PatternCompiler returned null when compiling turn {lastTurnWindow.turnId}.");
+                    return;
+                }
+
+                lastCompiledPatternTurn = compiled;
+                hasLastCompiledPatternTurn = true;
+
+                EmitDebugMessage(
+                    $"Compilation succeeded for turn {compiled.turnId}. Steps={compiled.StepCount}, bpm={compiled.bpm}.");
+
+                ClearCaptureRuntimeState();
+                SetPhase(TurnPhase.GeneratingAiResponse);
+            }
+            catch (Exception ex)
+            {
+                MoveToError($"Exception during PatternCompiler.Compile: {ex.Message}");
+            }
         }
 
         private bool TryGetCurrentSampleTime(out long currentSamples)
@@ -567,7 +593,7 @@ namespace IT4s.Orchestration
             return hitReceiver.TryGetCurrentSampleTime(out currentSamples);
         }
 
-        private void ClearActiveTurnState()
+        private void ClearCaptureRuntimeState()
         {
             hasLastTriggerHit = false;
             startSamples = -1;
@@ -584,7 +610,7 @@ namespace IT4s.Orchestration
             }
 
             isRunning = false;
-            ClearActiveTurnState();
+            ClearCaptureRuntimeState();
             Debug.LogError($"[TurnLoopController] {reason}");
             SetPhase(TurnPhase.Error);
         }
