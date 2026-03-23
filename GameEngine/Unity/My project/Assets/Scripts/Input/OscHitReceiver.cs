@@ -82,6 +82,8 @@ namespace IT4s.Input
 
         private void OnHitMessage(OSCMessage message)
         {
+
+            // Debug.Log($"[OscHitReceiver] RAW message received with {message.Values.Count} args");
             // Expected args:
             // 0 = tHigh (int32)
             // 1 = tLow  (int32)
