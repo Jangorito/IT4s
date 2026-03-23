@@ -44,6 +44,9 @@ namespace IT4s.Rhythm.Transformations
         /// </summary>
         public PatternTurn Transform(PatternTurn src, Mode mode = Mode.Auto)
         {
+            if (src == null)
+                throw new ArgumentNullException(nameof(src), "FeatureTransformer requires a compiled source PatternTurn.");
+
             PatternFeatures features = Analyse(src);
 
             return mode switch
@@ -62,6 +65,15 @@ namespace IT4s.Rhythm.Transformations
         /// </summary>
         public PatternFeatures Analyse(PatternTurn pattern)
         {
+            if (pattern == null)
+                throw new ArgumentNullException(nameof(pattern), "FeatureTransformer cannot analyse a null PatternTurn.");
+
+            if (pattern.velocity == null)
+                throw new ArgumentException("PatternTurn.velocity must be populated before transformation.", nameof(pattern));
+
+            if (pattern.offsetSamples == null)
+                throw new ArgumentException("PatternTurn.offsetSamples must be populated before transformation.", nameof(pattern));
+
             var onsets = new List<int>();   // list of step indices where hits occur
             var gaps = new List<int>();     // list of gap lengths between hits
 

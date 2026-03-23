@@ -27,7 +27,7 @@ namespace IT4s.Input
         [SerializeField] private int logEveryNHits = 1;
 
         [Header("Clock")]
-        [SerializeField] private int sampleRate = 48000;
+        [SerializeField] private int sampleRate = 44100;
 
         private HitBuffer _buffer;
         private IOSCBind _hitBind;   // <-- store bind handle

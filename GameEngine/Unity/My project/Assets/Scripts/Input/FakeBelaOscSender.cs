@@ -27,7 +27,7 @@ namespace IT4s.Input
         [SerializeField] private bool sendOnStart = true;
 
         [Header("Clock")]
-        [SerializeField] private int sampleRate = 48000;
+        [SerializeField] private int sampleRate = 44100;
 
         private long _tSamples;
         private float _accum;

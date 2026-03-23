@@ -4,7 +4,7 @@ namespace IT4s.Rhythm
     {
         public float bpm;              // fixed BPM
         public int stepsPerQuarter;    // e.g. 12 (flexible grid)
-        public int sampleRate;         // e.g. 48000
+        public int sampleRate;         // Bela sample clock, currently 44100 Hz
 
         public QuantisationSettings(float bpm, int stepsPerQuarter, int sampleRate)
         {
