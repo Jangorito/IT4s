@@ -159,6 +159,7 @@ bool setup(BelaContext *context, void *userData)
   }
 
   Bela_scheduleAuxiliaryTask(gOscTask);
+  rt_printf("Sample rate: %f\n", context->audioSampleRate);
   rt_printf("OSC sender task started\n");
     return true;
 }
