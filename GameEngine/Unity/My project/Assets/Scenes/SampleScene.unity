@@ -273,6 +273,7 @@ MonoBehaviour:
   receiver: {fileID: 657197623}
   address: /it4/hit
   logEveryNHits: 25
+  sampleRate: 44100
 --- !u!114 &657197623
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -289,8 +290,8 @@ MonoBehaviour:
   _closeOnPause: 0
   _mapBundle: {fileID: 0}
   _workInEditor: 0
-  _localHostMode: 0
-  _localHost: 192.168.68.139
+  _localHostMode: 1
+  _localHost: 0.0.0.0
   _localPort: 9000
 --- !u!4 &657197624
 Transform:
@@ -702,7 +703,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   receiver: {fileID: 1812478580}
   address: /it4/hit
-  logEveryNHits: 25
+  logEveryNHits: 0
+  sampleRate: 44100
 --- !u!114 &1812478580
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -719,8 +721,8 @@ MonoBehaviour:
   _closeOnPause: 0
   _mapBundle: {fileID: 0}
   _workInEditor: 0
-  _localHostMode: 0
-  _localHost: 192.168.68.139
+  _localHostMode: 1
+  _localHost: 0.0.0.0
   _localPort: 9000
 --- !u!114 &1812478581
 MonoBehaviour:
@@ -735,14 +737,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   hitReceiver: {fileID: 1812478579}
-  turnPlayer: {fileID: 1812478582}
-  startKey: 115
-  endKey: 101
   logHitsInTurn: 0
   maxHitLogs: 30
-  fixedBpm: 120
-  stepsPerQuarter: 12
-  sampleRate: 48000
 --- !u!114 &1812478582
 MonoBehaviour:
   m_ObjectHideFlags: 0

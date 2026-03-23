@@ -24,6 +24,7 @@ namespace IT4s.Input
         [SerializeField] private string address = "/it4/hit";
 
         [Header("Buffer")]
+        [SerializeField] private bool logEveryHit = false;
         [SerializeField] private int logEveryNHits = 1;
 
         [Header("Clock")]
@@ -110,7 +111,7 @@ namespace IT4s.Input
             _buffer.Add(hitEvent);
             OnHitReceived?.Invoke(hitEvent);
 
-            if (logEveryNHits > 0 && (_buffer.Count % logEveryNHits) == 0)
+            if (logEveryHit || (logEveryNHits > 0 && (_buffer.Count % logEveryNHits) == 0))
             {
                 Debug.Log(
                     $"[OscHitReceiver] hits={_buffer.Count} last={tSamples} " +
