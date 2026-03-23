@@ -59,8 +59,6 @@ namespace IT4s.Orchestration
     /// </summary>
     public class TurnLoopController : MonoBehaviour
     {
-        private const int BelaSampleRateHz = 44100;
-
         [Header("Scene Dependencies")]
         [SerializeField]
         [Tooltip("Component responsible for opening and closing human capture windows.")]
@@ -73,12 +71,6 @@ namespace IT4s.Orchestration
         [SerializeField]
         [Tooltip("Playback endpoint that will render AI responses once orchestration reaches that phase.")]
         private IT4ChuckTurnPlayer aiTurnPlayer;
-
-        [Header("Human Turn Timing")]
-        [SerializeField]
-        [Tooltip("Fixed capture duration for the human turn in Bela samples.")]
-        private int fixedHumanTurnDurationSamples = 192000;
-        // check whether this was computed with the correct sample rate: 4 seconds * 44100 samples/second = 176400 samples, so 192000 is a safe buffer above that.
 
         [Header("Debug Start Gate")]
         [SerializeField]
@@ -99,10 +91,12 @@ namespace IT4s.Orchestration
         private HitBuffer hitBuffer;
         private PatternCompiler patternCompiler;
         private FeatureTransformer featureTransformer;
+        private MusicalTimingConfig currentMusicalTiming;
 
         // Only the controller may change phase. External systems can observe CurrentPhase,
         // but all transitions are funnelled through SetPhase(...) for consistency and logging.
         public TurnPhase CurrentPhase { get; private set; } = TurnPhase.Transition;
+        public MusicalTimingConfig CurrentMusicalTiming => currentMusicalTiming;
 
         // Running state is kept separate from CurrentPhase so the loop can be paused or stopped
         // without needing extra domain phases before they are truly justified.
@@ -163,6 +157,7 @@ namespace IT4s.Orchestration
             PatternCompiler injectedPatternCompiler,
             IT4ChuckTurnPlayer injectedTurnPlayer,
             FeatureTransformer injectedFeatureTransformer,
+            MusicalTimingConfig initialTimingConfig,
             OscHitReceiver injectedHitReceiver = null)
         {
             turnCaptureController = injectedTurnCaptureController;
@@ -174,6 +169,7 @@ namespace IT4s.Orchestration
 
             ResolveReceiverReference();
             RefreshHitSubscription();
+            TryApplyMusicalTiming(initialTimingConfig, "Initial musical timing configured.");
 
             EmitDebugMessage($"Dependencies injected. {DescribeDependencyState()}");
         }
@@ -201,6 +197,44 @@ namespace IT4s.Orchestration
             ClearCaptureRuntimeState();
             EmitDebugMessage($"Turn loop started. {DescribeDependencyState()}");
             SetPhase(TurnPhase.WaitingForHuman);
+        }
+
+        /// <summary>
+        /// Requests a full timing update in one explicit operation.
+        /// Keeping updates centralised inside the controller makes runtime timing changes easy to
+        /// validate, log, and reason about as the orchestration owner evolves.
+        /// </summary>
+        public bool UpdateMusicalTiming(MusicalTimingConfig newConfig)
+        {
+            return TryApplyMusicalTiming(newConfig, "Musical timing updated.");
+        }
+
+        public bool UpdateBpm(float bpm)
+        {
+            MusicalTimingConfig updated = currentMusicalTiming;
+            updated.bpm = bpm;
+            return TryApplyMusicalTiming(updated, "Musical timing BPM updated.");
+        }
+
+        public bool UpdateBeatsPerBar(int beatsPerBar)
+        {
+            MusicalTimingConfig updated = currentMusicalTiming;
+            updated.beatsPerBar = beatsPerBar;
+            return TryApplyMusicalTiming(updated, "Musical timing beats-per-bar updated.");
+        }
+
+        public bool UpdateBarsPerTurn(int barsPerTurn)
+        {
+            MusicalTimingConfig updated = currentMusicalTiming;
+            updated.barsPerTurn = barsPerTurn;
+            return TryApplyMusicalTiming(updated, "Musical timing bars-per-turn updated.");
+        }
+
+        public bool UpdateStepsPerQuarter(int stepsPerQuarter)
+        {
+            MusicalTimingConfig updated = currentMusicalTiming;
+            updated.stepsPerQuarter = stepsPerQuarter;
+            return TryApplyMusicalTiming(updated, "Musical timing steps-per-quarter updated.");
         }
 
         /// <summary>
@@ -322,7 +356,8 @@ namespace IT4s.Orchestration
                 $"hitBuffer={(hitBuffer != null ? "set" : "missing")}, " +
                 $"compiler={(patternCompiler != null ? "set" : "missing")}, " +
                 $"turnPlayer={(aiTurnPlayer != null ? "set" : "missing")}, " +
-                $"featureTransformer={(featureTransformer != null ? "set" : "missing")}.";
+                $"featureTransformer={(featureTransformer != null ? "set" : "missing")}, " +
+                $"timing={DescribeTimingState()}.";
         }
 
         private void ResolveReceiverReference()
@@ -408,10 +443,9 @@ namespace IT4s.Orchestration
                 return false;
             }
 
-            if (fixedHumanTurnDurationSamples <= 0)
+            if (!currentMusicalTiming.IsValid(out string timingError))
             {
-                MoveToError(
-                    $"Turn loop cannot start because fixedHumanTurnDurationSamples={fixedHumanTurnDurationSamples} is invalid.");
+                MoveToError($"Turn loop cannot start because musical timing is invalid: {timingError}");
                 return false;
             }
 
@@ -474,10 +508,12 @@ namespace IT4s.Orchestration
                 return;
             }
 
-            if (triggerHit.tSamples > long.MaxValue - fixedHumanTurnDurationSamples)
+            long turnDurationSamples = currentMusicalTiming.GetTurnDurationSamples();
+
+            if (triggerHit.tSamples > long.MaxValue - turnDurationSamples)
             {
                 MoveToError(
-                    $"Cannot schedule human turn end because start={triggerHit.tSamples} would overflow with duration={fixedHumanTurnDurationSamples}.");
+                    $"Cannot schedule human turn end because start={triggerHit.tSamples} would overflow with duration={turnDurationSamples}.");
                 return;
             }
 
@@ -490,11 +526,13 @@ namespace IT4s.Orchestration
             lastTriggerHit = triggerHit;
             hasLastTriggerHit = true;
             startSamples = triggerHit.tSamples;
-            endSamples = startSamples + fixedHumanTurnDurationSamples;
+            endSamples = startSamples + turnDurationSamples;
             captureClockWarningIssued = false;
 
             EmitDebugMessage($"Human turn started at sample {startSamples}.");
-            EmitDebugMessage($"Human turn scheduled to end at sample {endSamples}.");
+            EmitDebugMessage(
+                $"Human turn scheduled to end at sample {endSamples} " +
+                $"(duration={turnDurationSamples} samples, {currentMusicalTiming.barsPerTurn} bars at {currentMusicalTiming.bpm} bpm).");
             SetPhase(TurnPhase.CapturingHuman);
         }
 
@@ -569,12 +607,7 @@ namespace IT4s.Orchestration
 
             try
             {
-                var q = new QuantisationSettings
-                {
-                    bpm = 120f,
-                    stepsPerQuarter = 12,
-                    sampleRate = BelaSampleRateHz
-                };
+                var q = currentMusicalTiming.ToQuantisationSettings();
 
                 var compiled = patternCompiler.Compile(lastTurnWindow, q);
 
@@ -686,6 +719,47 @@ namespace IT4s.Orchestration
         {
             lastGeneratedAiPatternTurn = null;
             hasLastGeneratedAiPatternTurn = false;
+        }
+
+        private bool TryApplyMusicalTiming(MusicalTimingConfig newConfig, string reason)
+        {
+            if (!newConfig.IsValid(out string validationError))
+            {
+                Debug.LogWarning(
+                    $"[TurnLoopController] Ignored musical timing update because it is invalid: {validationError}");
+                return false;
+            }
+
+            if (HasSameTimingValues(currentMusicalTiming, newConfig))
+            {
+                EmitDebugMessage($"Musical timing update ignored because values are unchanged. {newConfig}");
+                return true;
+            }
+
+            currentMusicalTiming = newConfig;
+            long durationSamples = currentMusicalTiming.GetTurnDurationSamples();
+            EmitDebugMessage($"{reason} {currentMusicalTiming}. turnDurationSamples={durationSamples}.");
+            return true;
+        }
+
+        private static bool HasSameTimingValues(MusicalTimingConfig a, MusicalTimingConfig b)
+        {
+            return
+                Mathf.Approximately(a.bpm, b.bpm) &&
+                a.beatsPerBar == b.beatsPerBar &&
+                a.barsPerTurn == b.barsPerTurn &&
+                a.stepsPerQuarter == b.stepsPerQuarter &&
+                a.sampleRate == b.sampleRate;
+        }
+
+        private string DescribeTimingState()
+        {
+            if (!currentMusicalTiming.IsValid(out _))
+            {
+                return "missing";
+            }
+
+            return $"{currentMusicalTiming}, turnDurationSamples={currentMusicalTiming.GetTurnDurationSamples()}";
         }
 
         private void MoveToError(string reason)

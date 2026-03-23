@@ -13,14 +13,24 @@ namespace IT4s.Bootstrap
     /// </summary>
     public class TurnLoopBootstrap : MonoBehaviour
     {
+        private const int BelaSampleRateHz = 44100;
+
         [Header("Scene Components")]
         [SerializeField] private TurnLoopController turnLoopController;
         [SerializeField] private TurnCaptureController turnCaptureController;
         [SerializeField] private OscHitReceiver oscHitReceiver;
         [SerializeField] private IT4ChuckTurnPlayer aiTurnPlayer;
 
+        [Header("Default Musical Timing")]
+        [SerializeField] private float bpm = 120f;
+        [SerializeField] private int beatsPerBar = 4;
+        [SerializeField] private int barsPerTurn = 2;
+        [SerializeField] private int stepsPerQuarter = 12;
+        [SerializeField] private int sampleRate = BelaSampleRateHz;
+
         private PatternCompiler patternCompiler;
         private FeatureTransformer featureTransformer;
+        private MusicalTimingConfig initialTimingConfig;
 
         private void Awake()
         {
@@ -32,6 +42,31 @@ namespace IT4s.Bootstrap
 
             patternCompiler = new PatternCompiler();
             featureTransformer = new FeatureTransformer();
+
+            initialTimingConfig = new MusicalTimingConfig(
+                bpm,
+                beatsPerBar,
+                barsPerTurn,
+                stepsPerQuarter,
+                sampleRate);
+
+            if (!initialTimingConfig.IsValid(out string timingError))
+            {
+                Debug.LogError($"[TurnLoopBootstrap] Initial musical timing is invalid: {timingError}");
+                enabled = false;
+                return;
+            }
+
+            turnLoopController.InjectDependencies(
+                turnCaptureController,
+                oscHitReceiver != null ? oscHitReceiver.Buffer : null,
+                patternCompiler,
+                aiTurnPlayer,
+                featureTransformer,
+                initialTimingConfig,
+                oscHitReceiver);
+
+            Debug.Log($"[TurnLoopBootstrap] Turn loop collaborators wired with timing {initialTimingConfig}.");
         }
 
         private void Start()
@@ -40,23 +75,6 @@ namespace IT4s.Bootstrap
             {
                 return;
             }
-
-            if (oscHitReceiver.Buffer == null)
-            {
-                Debug.LogError("[TurnLoopBootstrap] OscHitReceiver buffer is unavailable.");
-                enabled = false;
-                return;
-            }
-
-            turnLoopController.InjectDependencies(
-                turnCaptureController,
-                oscHitReceiver.Buffer,
-                patternCompiler,
-                aiTurnPlayer,
-                featureTransformer,
-                oscHitReceiver);
-
-            Debug.Log("[TurnLoopBootstrap] Turn loop collaborators wired.");
             turnLoopController.StartLoop();
             Debug.Log("[TurnLoopBootstrap] Turn loop started.");
         }
