@@ -233,7 +233,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &657197621
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -272,6 +272,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   receiver: {fileID: 657197623}
   address: /it4/hit
+  logEveryHit: 0
   logEveryNHits: 25
   sampleRate: 44100
 --- !u!114 &657197623
@@ -655,6 +656,7 @@ GameObject:
   - component: {fileID: 1812478579}
   - component: {fileID: 1812478581}
   - component: {fileID: 1812478582}
+  - component: {fileID: 1812478583}
   m_Layer: 0
   m_Name: ITS4System
   m_TagString: Untagged
@@ -703,7 +705,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   receiver: {fileID: 1812478580}
   address: /it4/hit
-  logEveryNHits: 0
+  logEveryHit: 1
+  logEveryNHits: 5
   sampleRate: 44100
 --- !u!114 &1812478580
 MonoBehaviour:
@@ -753,7 +756,25 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   chuck: {fileID: 1376128911}
   chuckFile: Chuck/IT4_TurnPlayer.ck
-  metronomeOnPlayback: 1
+  metronomeOnPlayback: 0
+--- !u!114 &1812478583
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1812478576}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d01a4bf038cfd4418ea8f66d36dac93, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  turnCaptureController: {fileID: 1812478581}
+  hitReceiver: {fileID: 1812478579}
+  aiTurnPlayer: {fileID: 1812478582}
+  debugHitValidityEnabled: 1
+  requireDebugHoldKeyForStart: 0
+  debugHoldKey: 304
 --- !u!1 &2063823081
 GameObject:
   m_ObjectHideFlags: 0
@@ -764,8 +785,9 @@ GameObject:
   m_Component:
   - component: {fileID: 2063823083}
   - component: {fileID: 2063823082}
+  - component: {fileID: 2063823084}
   m_Layer: 0
-  m_Name: InputModeBootstrap
+  m_Name: Bootstrap
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -801,6 +823,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2063823084
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2063823081}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ec686f6bd4145fa43b555af5c129785b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  turnLoopController: {fileID: 1812478583}
+  turnCaptureController: {fileID: 1812478581}
+  oscHitReceiver: {fileID: 1812478579}
+  aiTurnPlayer: {fileID: 1812478582}
+  bpm: 120
+  beatsPerBar: 4
+  barsPerTurn: 4
+  stepsPerQuarter: 12
+  sampleRate: 44100
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

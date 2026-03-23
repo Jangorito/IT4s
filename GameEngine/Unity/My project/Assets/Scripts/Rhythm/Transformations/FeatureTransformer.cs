@@ -145,15 +145,21 @@ namespace IT4s.Rhythm.Transformations
 
         private static PatternTurn AutoTransform(PatternTurn pattern, PatternFeatures features)
         {
-            if (features.activeSteps == 0)
+            if (features.activeSteps == 0){
+                Debug.Log("[FeatureTransformer] No active steps detected; returning original pattern.");
                 return ClonePattern(pattern);
-
-            if (features.maxGap < 6)
+            }
+            if (features.maxGap < 6){
+                Debug.Log("[FeatureTransformer] Detected dense pattern; applying sparse ornamentation.");
                 return SparseOrnament(pattern, features);
-
-            if (features.meanGap < 3f)
+            }
+            if (features.meanGap < 3f){
+                Debug.Log("[FeatureTransformer] Detected sparse pattern; applying echo accent transformation.");
                 return EchoAccent(pattern, features);
-
+        
+            }           
+            
+            Debug.Log("[FeatureTransformer] Detected moderate density; applying end fill transformation."); 
             return EndFill(pattern, features);
         }
 
