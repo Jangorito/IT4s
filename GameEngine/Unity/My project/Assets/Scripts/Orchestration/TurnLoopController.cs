@@ -59,6 +59,8 @@ namespace IT4s.Orchestration
     /// </summary>
     public class TurnLoopController : MonoBehaviour
     {
+        private const int BelaSampleRateHz = 44100;
+
         [Header("Scene Dependencies")]
         [SerializeField]
         [Tooltip("Component responsible for opening and closing human capture windows.")]
@@ -113,12 +115,17 @@ namespace IT4s.Orchestration
         private bool hasLastTurnWindow;
         private PatternTurn lastCompiledPatternTurn;
         private bool hasLastCompiledPatternTurn;
-        private bool compilingPlaceholderLogged;
+        private PatternTurn lastGeneratedAiPatternTurn;
+        private bool hasLastGeneratedAiPatternTurn;
         private bool captureClockWarningIssued;
         private OscHitReceiver subscribedHitReceiver;
 
         // Events provide observability without forcing UI or debug tools to poll the controller.
         // They also make the orchestration layer easier to test because state changes are explicit.
+        public PatternTurn LastCompiledPatternTurn => lastCompiledPatternTurn;
+        public bool HasLastCompiledPatternTurn => hasLastCompiledPatternTurn;
+        public PatternTurn LastGeneratedAiPatternTurn => lastGeneratedAiPatternTurn;
+        public bool HasLastGeneratedAiPatternTurn => hasLastGeneratedAiPatternTurn;
         public event Action<TurnPhase> OnPhaseChanged;
         public event Action<string> OnDebugMessage;
 
@@ -245,9 +252,7 @@ namespace IT4s.Orchestration
                     break;
 
                 case TurnPhase.GeneratingAiResponse:
-                    // Future implementation:
-                    // Use FeatureTransformer or a later AI module to derive the machine response.
-                    // The phase exists now so the orchestration contract is stable before logic arrives.
+                    TickGeneratingAiResponse();
                     break;
 
                 case TurnPhase.PlayingAiResponse:
@@ -294,11 +299,6 @@ namespace IT4s.Orchestration
             }
 
             CurrentPhase = newPhase;
-
-            if (CurrentPhase != TurnPhase.CompilingHumanTurn)
-            {
-                compilingPlaceholderLogged = false;
-            }
 
             OnPhaseChanged?.Invoke(CurrentPhase);
             EmitDebugMessage($"Phase changed to {CurrentPhase}.");
@@ -411,6 +411,18 @@ namespace IT4s.Orchestration
             {
                 MoveToError(
                     $"Turn loop cannot start because fixedHumanTurnDurationSamples={fixedHumanTurnDurationSamples} is invalid.");
+                return false;
+            }
+
+            if (patternCompiler == null)
+            {
+                MoveToError("Turn loop cannot start because PatternCompiler is missing.");
+                return false;
+            }
+
+            if (featureTransformer == null)
+            {
+                MoveToError("Turn loop cannot start because FeatureTransformer is missing.");
                 return false;
             }
 
@@ -554,7 +566,7 @@ namespace IT4s.Orchestration
                 {
                     bpm = 120f,
                     stepsPerQuarter = 12,
-                    sampleRate = 48000
+                    sampleRate = BelaSampleRateHz
                 };
 
                 var compiled = patternCompiler.Compile(lastTurnWindow, q);
@@ -567,9 +579,10 @@ namespace IT4s.Orchestration
 
                 lastCompiledPatternTurn = compiled;
                 hasLastCompiledPatternTurn = true;
+                ClearGeneratedAiResponseState();
 
                 EmitDebugMessage(
-                    $"Compilation succeeded for turn {compiled.turnId}. Steps={compiled.StepCount}, bpm={compiled.bpm}.");
+                    $"Compilation succeeded for turn {compiled.turnId}. Steps={compiled.StepCount}, bpm={compiled.bpm}, sampleRate={compiled.sampleRate}.");
 
                 ClearCaptureRuntimeState();
                 SetPhase(TurnPhase.GeneratingAiResponse);
@@ -577,6 +590,52 @@ namespace IT4s.Orchestration
             catch (Exception ex)
             {
                 MoveToError($"Exception during PatternCompiler.Compile: {ex.Message}");
+            }
+        }
+
+        private void TickGeneratingAiResponse()
+        {
+            if (!hasLastCompiledPatternTurn || lastCompiledPatternTurn == null)
+            {
+                MoveToError("GeneratingAiResponse failed because no compiled human PatternTurn was available.");
+                return;
+            }
+
+            if (featureTransformer == null)
+            {
+                MoveToError("GeneratingAiResponse failed because FeatureTransformer reference is missing.");
+                return;
+            }
+
+            EmitDebugMessage(
+                $"AI response generation started for turn {lastCompiledPatternTurn.turnId}. " +
+                $"Source steps={lastCompiledPatternTurn.StepCount}, sampleRate={lastCompiledPatternTurn.sampleRate}.");
+
+            try
+            {
+                var generatedAiPattern = featureTransformer.Transform(lastCompiledPatternTurn);
+
+                if (generatedAiPattern == null)
+                {
+                    MoveToError(
+                        $"FeatureTransformer returned null when generating an AI response for turn {lastCompiledPatternTurn.turnId}.");
+                    return;
+                }
+
+                lastGeneratedAiPatternTurn = generatedAiPattern;
+                hasLastGeneratedAiPatternTurn = true;
+
+                EmitDebugMessage(
+                    $"AI response generation succeeded for turn {generatedAiPattern.turnId}. " +
+                    $"Steps={generatedAiPattern.StepCount}, sampleRate={generatedAiPattern.sampleRate}.");
+                EmitDebugMessage(
+                    $"AI response pattern stored for playback for turn {generatedAiPattern.turnId}. Advancing to PlayingAiResponse.");
+
+                SetPhase(TurnPhase.PlayingAiResponse);
+            }
+            catch (Exception ex)
+            {
+                MoveToError($"Exception during FeatureTransformer.Transform: {ex.Message}");
             }
         }
 
@@ -598,8 +657,13 @@ namespace IT4s.Orchestration
             hasLastTriggerHit = false;
             startSamples = -1;
             endSamples = -1;
-            compilingPlaceholderLogged = false;
             captureClockWarningIssued = false;
+        }
+
+        private void ClearGeneratedAiResponseState()
+        {
+            lastGeneratedAiPatternTurn = null;
+            hasLastGeneratedAiPatternTurn = false;
         }
 
         private void MoveToError(string reason)
@@ -611,6 +675,7 @@ namespace IT4s.Orchestration
 
             isRunning = false;
             ClearCaptureRuntimeState();
+            ClearGeneratedAiResponseState();
             Debug.LogError($"[TurnLoopController] {reason}");
             SetPhase(TurnPhase.Error);
         }
