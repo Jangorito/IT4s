@@ -122,6 +122,68 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &60411586
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 60411588}
+  - component: {fileID: 60411587}
+  m_Layer: 0
+  m_Name: AiPatternPanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &60411587
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 60411586}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a36c8cb2a22d234f8e0e4ea15393a4c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  panelTitle: AI PATTERN
+  drawStandalone: 0
+  standaloneRect:
+    serializedVersion: 2
+    x: 16
+    y: 120
+    width: 960
+    height: 260
+  stepsPerRow: 24
+  showOffsetMarkers: 1
+  showLegend: 1
+  panelBackground: {r: 0.11, g: 0.11, b: 0.11, a: 0.95}
+  borderColor: {r: 0.75, g: 0.75, b: 0.75, a: 1}
+  strongHitColor: {r: 0.95, g: 0.95, b: 0.95, a: 1}
+  mediumHitColor: {r: 0.72, g: 0.82, b: 1, a: 1}
+  weakHitColor: {r: 0.45, g: 0.6, b: 0.85, a: 1}
+  inactiveCellColor: {r: 0.18, g: 0.18, b: 0.18, a: 1}
+  markerColor: {r: 0.05, g: 0.05, b: 0.05, a: 1}
+--- !u!4 &60411588
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 60411586}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -1391.6254, y: 692.0488, z: -24.807587}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -472,6 +534,68 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!1 &846225786
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 846225788}
+  - component: {fileID: 846225787}
+  m_Layer: 0
+  m_Name: HumanPatternPanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &846225787
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 846225786}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a36c8cb2a22d234f8e0e4ea15393a4c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  panelTitle: HUMAN PATTERN
+  drawStandalone: 0
+  standaloneRect:
+    serializedVersion: 2
+    x: 16
+    y: 120
+    width: 960
+    height: 260
+  stepsPerRow: 24
+  showOffsetMarkers: 1
+  showLegend: 1
+  panelBackground: {r: 0.11, g: 0.11, b: 0.11, a: 0.95}
+  borderColor: {r: 0.75, g: 0.75, b: 0.75, a: 1}
+  strongHitColor: {r: 0.95, g: 0.95, b: 0.95, a: 1}
+  mediumHitColor: {r: 0.72, g: 0.82, b: 1, a: 1}
+  weakHitColor: {r: 0.45, g: 0.6, b: 0.85, a: 1}
+  inactiveCellColor: {r: 0.18, g: 0.18, b: 0.18, a: 1}
+  markerColor: {r: 0.05, g: 0.05, b: 0.05, a: 1}
+--- !u!4 &846225788
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 846225786}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -1391.6254, y: 692.0488, z: -24.807587}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1376128909
 GameObject:
   m_ObjectHideFlags: 0
@@ -657,6 +781,8 @@ GameObject:
   - component: {fileID: 1812478581}
   - component: {fileID: 1812478582}
   - component: {fileID: 1812478583}
+  - component: {fileID: 1812478585}
+  - component: {fileID: 1812478584}
   m_Layer: 0
   m_Name: ITS4System
   m_TagString: Untagged
@@ -775,6 +901,54 @@ MonoBehaviour:
   debugHitValidityEnabled: 1
   requireDebugHoldKeyForStart: 0
   debugHoldKey: 304
+--- !u!114 &1812478584
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1812478576}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a36c8cb2a22d234f8e0e4ea15393a4c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  panelTitle: PATTERN
+  drawStandalone: 0
+  standaloneRect:
+    serializedVersion: 2
+    x: 16
+    y: 120
+    width: 960
+    height: 260
+  stepsPerRow: 24
+  showOffsetMarkers: 1
+  showLegend: 1
+  panelBackground: {r: 0.11, g: 0.11, b: 0.11, a: 0.95}
+  borderColor: {r: 0.75, g: 0.75, b: 0.75, a: 1}
+  strongHitColor: {r: 0.95, g: 0.95, b: 0.95, a: 1}
+  mediumHitColor: {r: 0.72, g: 0.82, b: 1, a: 1}
+  weakHitColor: {r: 0.45, g: 0.6, b: 0.85, a: 1}
+  inactiveCellColor: {r: 0.18, g: 0.18, b: 0.18, a: 1}
+  markerColor: {r: 0.05, g: 0.05, b: 0.05, a: 1}
+--- !u!114 &1812478585
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1812478576}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ead9eab69edfca2428c26000e152bddb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  turnLoopController: {fileID: 1812478583}
+  humanPatternRenderer: {fileID: 846225787}
+  aiPatternRenderer: {fileID: 60411587}
+  showDebugUi: 1
+  maxPanelWidth: 980
+  screenPadding: {x: 16, y: 16}
 --- !u!1 &2063823081
 GameObject:
   m_ObjectHideFlags: 0
@@ -841,7 +1015,7 @@ MonoBehaviour:
   aiTurnPlayer: {fileID: 1812478582}
   bpm: 120
   beatsPerBar: 4
-  barsPerTurn: 4
+  barsPerTurn: 2
   stepsPerQuarter: 12
   sampleRate: 44100
 --- !u!1660057539 &9223372036854775807
@@ -854,3 +1028,5 @@ SceneRoots:
   - {fileID: 1376128910}
   - {fileID: 794608145}
   - {fileID: 2063823083}
+  - {fileID: 846225788}
+  - {fileID: 60411588}

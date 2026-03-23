@@ -119,11 +119,16 @@ namespace IT4s.Orchestration
 
         // Events provide observability without forcing UI or debug tools to poll the controller.
         // They also make the orchestration layer easier to test because state changes are explicit.
+        public TurnWindow LastTurnWindow => lastTurnWindow;
+        public bool HasLastTurnWindow => hasLastTurnWindow;
         public PatternTurn LastCompiledPatternTurn => lastCompiledPatternTurn;
         public bool HasLastCompiledPatternTurn => hasLastCompiledPatternTurn;
         public PatternTurn LastGeneratedAiPatternTurn => lastGeneratedAiPatternTurn;
         public bool HasLastGeneratedAiPatternTurn => hasLastGeneratedAiPatternTurn;
         public event Action<TurnPhase> OnPhaseChanged;
+        public event Action<TurnWindow> OnHumanTurnCaptured;
+        public event Action<PatternTurn> OnHumanPatternCompiled;
+        public event Action<PatternTurn> OnAiPatternGenerated;
         public event Action<string> OnDebugMessage;
 
         private void Awake()
@@ -582,8 +587,7 @@ namespace IT4s.Orchestration
                 return;
             }
 
-            lastTurnWindow = turnWindow;
-            hasLastTurnWindow = true;
+            StoreCapturedTurnWindow(turnWindow);
 
             EmitDebugMessage(
                 $"Human turn ended at sample {turnWindow.endSamples}. Window={turnWindow.turnId}, hits={turnWindow.HitCount}.");
@@ -619,8 +623,7 @@ namespace IT4s.Orchestration
                     return;
                 }
 
-                lastCompiledPatternTurn = compiled;
-                hasLastCompiledPatternTurn = true;
+                StoreCompiledHumanPattern(compiled);
                 ClearGeneratedAiResponseState();
 
                 EmitDebugMessage(
@@ -664,8 +667,7 @@ namespace IT4s.Orchestration
                     return;
                 }
 
-                lastGeneratedAiPatternTurn = generatedAiPattern;
-                hasLastGeneratedAiPatternTurn = true;
+                StoreGeneratedAiPattern(generatedAiPattern);
 
                 EmitDebugMessage(
                     $"AI response generation succeeded for turn {generatedAiPattern.turnId}. " +
@@ -719,8 +721,33 @@ namespace IT4s.Orchestration
 
         private void ClearGeneratedAiResponseState()
         {
-            lastGeneratedAiPatternTurn = null;
-            hasLastGeneratedAiPatternTurn = false;
+            if (lastGeneratedAiPatternTurn == null && !hasLastGeneratedAiPatternTurn)
+            {
+                return;
+            }
+
+            StoreGeneratedAiPattern(null);
+        }
+
+        private void StoreCapturedTurnWindow(TurnWindow turnWindow)
+        {
+            lastTurnWindow = turnWindow;
+            hasLastTurnWindow = true;
+            OnHumanTurnCaptured?.Invoke(turnWindow);
+        }
+
+        private void StoreCompiledHumanPattern(PatternTurn pattern)
+        {
+            lastCompiledPatternTurn = pattern;
+            hasLastCompiledPatternTurn = pattern != null;
+            OnHumanPatternCompiled?.Invoke(pattern);
+        }
+
+        private void StoreGeneratedAiPattern(PatternTurn pattern)
+        {
+            lastGeneratedAiPatternTurn = pattern;
+            hasLastGeneratedAiPatternTurn = pattern != null;
+            OnAiPatternGenerated?.Invoke(pattern);
         }
 
         private bool TryApplyMusicalTiming(MusicalTimingConfig newConfig, string reason)
