@@ -134,7 +134,7 @@ namespace IT4s.Rhythm.Transformations
         private static PatternTurn AutoTransform(PatternTurn pattern, PatternFeatures features)
         {
             if (features.activeSteps == 0)
-                return pattern;
+                return ClonePattern(pattern);
 
             if (features.maxGap < 6)
                 return SparseOrnament(pattern, features);
