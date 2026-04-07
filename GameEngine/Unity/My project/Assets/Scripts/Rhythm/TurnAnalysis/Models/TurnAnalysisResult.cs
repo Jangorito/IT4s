@@ -9,8 +9,7 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
         public EnergyFeatures Energy { get; private set; }
         public AnchorFeatures Anchor { get; private set; }
         public EndActivityFeatures EndActivity { get; private set; }
-        public ActivityShape DensityShape { get; private set; }
-        public ActivityShape EnergyShape { get; private set; }
+        public SegmentActivityProfileFeatures SegmentActivityProfile { get; private set; }
 
         public TurnAnalysisResult()
             : this(
@@ -18,8 +17,7 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
                 new EnergyFeatures(),
                 new AnchorFeatures(),
                 new EndActivityFeatures(),
-                ActivityShape.Flat,
-                ActivityShape.Flat)
+                new SegmentActivityProfileFeatures())
         {
         }
 
@@ -28,15 +26,13 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
             EnergyFeatures energy,
             AnchorFeatures anchor,
             EndActivityFeatures endActivity,
-            ActivityShape densityShape,
-            ActivityShape energyShape)
+            SegmentActivityProfileFeatures segmentActivityProfile)
         {
             Density = density ?? new DensityFeatures();
             Energy = energy ?? new EnergyFeatures();
             Anchor = anchor ?? new AnchorFeatures();
             EndActivity = endActivity ?? new EndActivityFeatures();
-            DensityShape = densityShape;
-            EnergyShape = energyShape;
+            SegmentActivityProfile = segmentActivityProfile ?? new SegmentActivityProfileFeatures();
         }
     }
 }
