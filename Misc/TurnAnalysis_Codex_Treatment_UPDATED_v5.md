@@ -103,29 +103,14 @@ float stepDensity = N > 0
 
 #### Step 3 — Segment splitting
 
-Fixed segment count:
+Use the shared segment partition helper created in Section 0.
 
-```csharp
-const int SEGMENTS = 4;
-```
+Do NOT reimplement segment logic in this analyser.
 
-Compute base size and remainder:
-
-```csharp
-int baseSize = N / SEGMENTS;
-int remainder = N % SEGMENTS;
-```
-
-Segment sizes:
-
-```csharp
-int size0 = baseSize + (remainder > 0 ? 1 : 0);
-int size1 = baseSize + (remainder > 1 ? 1 : 0);
-int size2 = baseSize + (remainder > 2 ? 1 : 0);
-int size3 = baseSize;
-```
-
----
+The helper must:
+- return 4 contiguous segments
+- distribute remainder from the front
+- handle N = 0 safely
 
 #### Step 4 — Segment densities
 
