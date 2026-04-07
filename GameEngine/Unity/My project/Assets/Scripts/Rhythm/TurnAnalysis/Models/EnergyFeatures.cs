@@ -18,7 +18,7 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
         public bool IsDecrescendo { get; private set; }
 
         public EnergyFeatures()
-            : this(0f, 0, 0f, null, false, false, false, false, false, false)
+            : this(0f, 0, 0f, null, false, true, false, false, false, false)
         {
         }
 

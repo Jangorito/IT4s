@@ -404,6 +404,31 @@ Segments with no hits:
 - Output should be immutable after creation
 - ResponsePlanner should primarily consume derived traits, but raw metrics should remain accessible for debugging, tuning, and future planner refinements
 
+
+### 5.8 Implementation Reqs
+
+Implementation requirements:
+
+- Implement as EnergyAnalyser : IAnalyser<EnergyFeatures>
+- Use the shared SegmentHelper from the foundations section
+- Do NOT reimplement segment partition logic
+- Accept EnergyThresholds via constructor injection
+- Do NOT hardcode thresholds inside the analyser
+- Do NOT mutate PatternTurn
+- Do NOT depend on external state
+- EnergyFeatures should contain results only, not thresholds/config
+
+Deliverables:
+- EnergyThresholds class
+- EnergyAnalyser implementation
+- Any required refinement to EnergyFeatures
+- Unit tests covering raw metrics, derived traits, and edge cases
+
+Important edge-case rule:
+For turns with no active steps:
+- IsLowEnergy = true
+- all other traits = false
+
 ---
 
 ## 6. Anchor Feature Specification
