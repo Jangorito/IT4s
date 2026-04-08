@@ -431,323 +431,238 @@ For turns with no active steps:
 
 ---
 
-## 6. Anchor Feature Specification
+## 6. Anchor Detection (Structural Salience and Support Feature)
 
-### 6.1 Purpose
+### 6.1 Definition
 
-Anchor Detection identifies structurally salient active steps within a PatternTurn.
+Anchor Detection identifies structurally salient hits within a turn.
 
-An anchor is an active step whose computed salience score meets or exceeds a fixed anchor threshold.
+An anchor is defined as an active step whose computed salience score exceeds a fixed anchor threshold. In this architecture, salience represents the degree to which a hit stands out as a point of structural importance within the turn.
 
-This feature family is intended to provide event-level structural importance, not just global descriptive summaries. It should therefore expose both per-step data and compact aggregate summaries for planner use.
+In the upgraded formulation, Anchor Detection also captures whether salient activity is **structurally supported**. This allows the system to distinguish between hits that are merely prominent in isolation and hits that contribute to a more grounded and musically coherent rhythmic structure.
 
----
-
-### 6.2 Data Structure
-
-```csharp
-public sealed class AnchorFeatures
-{
-    public int StepCount { get; init; }
-
-    public IReadOnlyList<float> StepSalienceScores { get; init; }   // length = StepCount
-    public IReadOnlyList<bool> StepIsAnchor { get; init; }          // length = StepCount
-
-    public int AnchorCount { get; init; }
-    public IReadOnlyList<int> AnchorIndices { get; init; }          // ascending order
-
-    public int? StrongestAnchorIndex { get; init; }
-    public float StrongestAnchorScore { get; init; }
-
-    public bool HasOpeningAnchor { get; init; }
-    public bool HasClosingAnchor { get; init; }
-
-    public IReadOnlyList<int> AnchorCountsPerSegment { get; init; } // length = 4
-}
-```
-
-Output guarantees:
-
-- StepSalienceScores length = StepCount
-- StepIsAnchor length = StepCount
-- inactive steps must always have salience 0 and anchor flag false
-- AnchorIndices must be sorted in ascending order
-- AnchorCount must equal AnchorIndices.Count
-- StrongestAnchorIndex must be null when AnchorCount == 0
-- StrongestAnchorScore must be 0 when AnchorCount == 0
-- AnchorCountsPerSegment length = 4
+This allows the system to move beyond describing how much activity occurs or how intense it is, and instead begin identifying which specific events matter most, and how strongly the turn as a whole is supported by them.
 
 ---
 
-### 6.3 Fixed Constants
+### 6.2 Feature Structure
 
-Use the following fixed v1 constants:
+Anchor Detection is treated as an event-level salience and support feature family consisting of:
 
-```csharp
-const float VELOCITY_WEIGHT = 0.40f;
-const float ACCENT_WEIGHT = 0.30f;
-const float ISOLATION_WEIGHT = 0.20f;
-const float POSITION_WEIGHT = 0.10f;
+- per-step salience scores
+- per-step binary anchor flags
+- aggregate anchor summaries
+- boundary-anchor indicators
+- segment-level anchor counts
+- support-quality summaries
 
-const float ANCHOR_THRESHOLD = 0.55f;
-const int MAX_VELOCITY = 127;
-const int LOCAL_RADIUS = 2;
-const int SEGMENTS = 4;
-```
+This layered structure is important. It preserves low-level inspectability for debugging and analysis, while also exposing compact summaries that can be used directly by the ResponsePlanner.
 
-These values are part of the locked v1 specification.
+The support layer does not replace anchor detection. Rather, it extends it by summarising how much of the turn’s active material is grounded by stronger positions and how much remains weak and unsupported.
 
 ---
 
-### 6.4 Salience Formula
+### 6.3 Why Anchor Detection Matters
 
-For each active step `i`:
+Density describes occupancy.
 
-```csharp
-AnchorSalience(i) =
-    0.40f * VelocityScore(i)
-  + 0.30f * LocalAccentScore(i)
-  + 0.20f * IsolationScore(i)
-  + 0.10f * PositionalScore(i);
-```
+Energy describes intensity.
 
-For inactive steps:
+Neither, however, identifies which events are structurally important.
 
-```csharp
-AnchorSalience(i) = 0f;
-```
+Anchor Detection fills this gap by identifying hits that function as points of emphasis, arrival, or reference within the phrase. These are the events that the AI may later choose to preserve, mirror, reinforce, answer, or contrast.
 
-Binary rule:
+The support extension adds a second question:
 
-```csharp
-IsAnchor(i) = pattern.velocity[i] > 0 && AnchorSalience(i) >= 0.55f;
-```
+- not only which hits matter most,
+- but also whether the turn’s activity is rhythmically grounded or unstable.
+
+This is musically useful because short drum phrases often derive their identity not only from loud or isolated hits, but from the balance between grounded points of emphasis and weaker activity around them.
 
 ---
 
-### 6.5 Component Definitions
+### 6.4 Salience Components
 
-#### 6.5.1 VelocityScore
+Anchor salience remains derived from four fixed components:
 
-```csharp
-float VelocityScore(int velocity)
-{
-    return Math.Clamp((float)velocity / MAX_VELOCITY, 0f, 1f);
-}
-```
+- absolute velocity
+- local accent
+- local isolation
+- positional bonus
 
-This is the absolute velocity contribution.
+These components are retained because they are lightweight, interpretable, and suitable for the project’s constrained input setting.
 
----
+Absolute velocity captures raw emphasis.
 
-#### 6.5.2 LocalAccentScore
+Local accent captures whether a hit stands out relative to nearby active hits.
 
-Neighbourhood window:
-- indices from `i - 2` to `i + 2`
-- exclude `i`
-- include only active neighbouring steps when computing local mean
+Local isolation captures whether a hit is exposed by surrounding space.
 
-Algorithm:
+Positional bonus captures the light additional structural importance often associated with turn openings and turn endings.
 
-```csharp
-float LocalAccentScore(PatternTurn pattern, int i)
-{
-    float sum = 0f;
-    int count = 0;
-
-    for (int j = i - LOCAL_RADIUS; j <= i + LOCAL_RADIUS; j++)
-    {
-        if (j == i)
-            continue;
-        if (j < 0 || j >= pattern.StepCount)
-            continue;
-
-        int v = pattern.velocity[j];
-        if (v > 0)
-        {
-            sum += v;
-            count++;
-        }
-    }
-
-    if (count == 0)
-        return 0f;
-
-    float localMean = sum / count;
-    float score = (pattern.velocity[i] - localMean) / MAX_VELOCITY;
-    return Math.Clamp(score, 0f, 1f);
-}
-```
-
-Notes:
-- negative differences should clamp to 0
-- no active neighbours means no local accent bonus
+Together, these components provide a practical approximation of event salience without requiring complex metrical assumptions or long-range motif analysis.
 
 ---
 
-#### 6.5.3 IsolationScore
+### 6.5 Support Layer
 
-Neighbourhood window:
-- indices from `i - 2` to `i + 2`
-- exclude `i`
-- treat out-of-bounds positions as inactive
+In addition to salience scoring, the upgraded feature family derives a lightweight notion of structural support.
 
-Algorithm:
+Support is intended to approximate whether active hits occur in relation to stronger rhythmic reference points rather than as isolated weak events.
 
-```csharp
-float IsolationScore(PatternTurn pattern, int i)
-{
-    int inactiveCount = 0;
+Given the project’s constraints, support is defined conservatively using a fixed step-weight hierarchy and local neighbourhood checks rather than a full style-specific metrical model.
 
-    for (int j = i - LOCAL_RADIUS; j <= i + LOCAL_RADIUS; j++)
-    {
-        if (j == i)
-            continue;
+This support layer is deliberately lightweight. It does not attempt to model full meter induction or probabilistic beat inference. Instead, it captures a simpler distinction between:
 
-        if (j < 0 || j >= pattern.StepCount)
-        {
-            inactiveCount++;
-            continue;
-        }
+- activity that is structurally grounded
+- activity that is weak but supported by nearby stronger material
+- activity that is weak and unsupported
 
-        if (pattern.velocity[j] == 0)
-            inactiveCount++;
-    }
-
-    return inactiveCount / 4f;
-}
-```
-
-Interpretation:
-- 0 = fully surrounded by activity
-- 1 = fully isolated in the local window
+This makes it suitable for a one-pad, short-turn interactive drumming system.
 
 ---
 
-#### 6.5.4 PositionalScore
+### 6.6 Support Components
 
-A step receives a positional bonus only if it is the first active step or the last active step in the turn.
+The support layer is derived from two sources:
 
-```csharp
-float PositionalScore(int i, int? firstActiveIndex, int? lastActiveIndex)
-{
-    if (!firstActiveIndex.HasValue || !lastActiveIndex.HasValue)
-        return 0f;
+- positional metrical weight
+- local support context
 
-    if (i == firstActiveIndex.Value || i == lastActiveIndex.Value)
-        return 1f;
+Positional metrical weight assigns each step a fixed structural weight according to its place in the turn grid. Stronger positions receive higher weights; weaker subdivisions receive lower weights.
 
-    return 0f;
-}
-```
+Local support context checks whether weaker active steps occur near stronger active steps within a small neighbourhood window.
 
-If the same step is both first and last active, the score remains 1.
+This produces a graded distinction between:
 
----
+- strong-position hits
+- weak-position hits that are supported
+- weak-position hits that are unsupported
 
-### 6.6 Algorithm
-
-#### Step 1 — Precompute boundary indices
-
-Find:
-- first active step index
-- last active step index
-
-If there are no active steps, both remain null.
+The purpose is not to impose a rigid theory of meter, but to provide a lightweight approximation of rhythmic grounding that is defensible within the project’s limited input setting.
 
 ---
 
-#### Step 2 — Compute salience and flags
+### 6.7 Salience Model
 
-Allocate:
-- float salience[StepCount]
-- bool isAnchor[StepCount]
+For each active step, a continuous salience score is computed as a weighted combination of the four salience components.
 
-For each step:
-- if inactive: salience = 0, isAnchor = false
-- if active: compute component scores, combine via weighted sum, then threshold
+For inactive steps, salience is always zero.
 
----
+This score-first design is retained deliberately. Rather than classifying anchors directly, the system first estimates how anchor-like each active step is, then derives binary anchor flags from that score.
 
-#### Step 3 — Collect aggregate summaries
+This has several advantages:
 
-Build:
-- AnchorIndices
-- AnchorCount
-- StrongestAnchorIndex
-- StrongestAnchorScore
-- HasOpeningAnchor
-- HasClosingAnchor
-- AnchorCountsPerSegment
+- it is easier to justify in the dissertation
+- it is easier to inspect and debug
+- it is easier to tune later
+- it preserves more information for future planner refinement
 
-When two anchors share the same salience, StrongestAnchorIndex must resolve to the earliest such index for deterministic behaviour.
+The support layer is computed in parallel as a separate descriptive summary and does not alter the anchor thresholding rule itself.
 
 ---
 
-#### Step 4 — Segment counts
+### 6.8 Binary Anchor Decision
 
-Use the same 4-segment partitioning logic already used by DensityFeatures and EnergyFeatures.
+A step is classified as an anchor only if:
 
-Count how many anchor indices fall into each segment.
+- it is active
+- its salience score meets or exceeds the anchor threshold
 
----
+This means not every strong hit becomes an anchor automatically. A hit generally needs support from more than one cue, such as strength plus isolation, or strength plus contextual prominence.
 
-### 6.7 Edge Cases
+This produces the intended sparse-to-moderate anchor behaviour: anchors should be selective and meaningful, rather than common enough to dilute the signal.
 
-Empty turn (StepCount == 0):
-- StepSalienceScores = []
-- StepIsAnchor = []
-- AnchorCount = 0
-- AnchorIndices = []
-- StrongestAnchorIndex = null
-- StrongestAnchorScore = 0
-- HasOpeningAnchor = false
-- HasClosingAnchor = false
-- AnchorCountsPerSegment = [0,0,0,0]
-
-No active hits:
-- same behaviour as above except StepSalienceScores and StepIsAnchor should still have length StepCount if StepCount > 0
-
-Single active hit:
-- VelocityScore computed normally
-- LocalAccentScore = 0
-- IsolationScore = 1
-- PositionalScore = 1
-- that hit may become an anchor if total salience >= threshold
-
-Dense flat pattern:
-- LocalAccentScore tends toward 0
-- IsolationScore tends toward low values
-- anchors should be uncommon unless velocity is sufficiently high
-
-Equal strongest anchor scores:
-- earliest index wins for StrongestAnchorIndex
+The support layer should therefore be understood as complementary to anchor classification, not a replacement for it.
 
 ---
 
-### 6.8 Constraints
+### 6.9 Output Representation
 
-- Must run in O(N)
-- Must be deterministic
-- Must not use randomness
-- Must not depend on external state
-- Must be real-time safe
-- Should avoid unnecessary allocations inside hot paths beyond the required result containers
+The feature family should expose:
+
+- a salience score for every step
+- a binary anchor flag for every step
+- the set of anchor indices
+- the total anchor count
+- the strongest anchor and its score
+- whether the turn begins with an anchor
+- whether the turn ends with an anchor
+- anchor counts per segment
+- average metrical support of active hits
+- ratio of strong-position active hits
+- ratio of supported weak hits
+- ratio of unsupported weak hits
+
+This output structure is important because it supports both immediate planner use and later inspection. The planner may reason over compact summaries such as strongest anchor or support quality, while debugging tools can still inspect the full step-level salience profile.
 
 ---
 
-### 6.9 Integration Notes
+### 6.10 Segment Alignment
 
-- Implement as a dedicated AnchorAnalyzer or equivalent modular analysis stage
-- Reuse the same segment partition helper used by DensityAnalyzer and EnergyAnalyzer
-- Output should be immutable after creation
-- ResponsePlanner may consume:
-  - AnchorCount
-  - StrongestAnchorIndex
-  - HasOpeningAnchor
-  - HasClosingAnchor
-  - AnchorCountsPerSegment
-- Full step salience and flags should remain available for debugging, testing, and future planner refinement
+Anchor summaries should continue to use the same four-segment partitioning scheme already established for density and energy.
+
+This ensures temporal alignment across feature families. For example, the system can later reason about whether a turn becomes denser, louder, and more anchor-heavy toward its ending, all within the same shared temporal frame.
+
+The support layer may initially remain global rather than segment-wise if implementation simplicity is preferred. However, the shared segment frame leaves room for future expansion to segment-level support summaries if required.
+
+---
+
+### 6.11 Musical Interpretation
+
+Anchor Detection provides the system with a first layer of phrase-structural awareness.
+
+It allows the analysis stage to ask not only:
+
+- how much happened
+- how intensely it happened
+
+but also:
+
+- which hits mattered most
+- whether the turn’s activity was rhythmically grounded
+
+This is musically useful because salient events often define the remembered shape of a short rhythmic phrase, while support quality helps distinguish between gestures that feel coherent and gestures that feel scattered or unstable.
+
+Anchor Detection therefore helps the AI respond not only to the identity of the phrase, but also to the degree of structural grounding within that identity.
+
+---
+
+### 6.12 Design Rationale
+
+The upgraded design remains intentionally conservative.
+
+It still avoids:
+
+- heavy dependence on style-specific beat models
+- long-range repetition logic
+- multi-instrument reasoning
+- full probabilistic metrical inference
+
+Instead, it adds only a lightweight support layer built from:
+
+- fixed positional weighting
+- local neighbourhood support
+
+This is a pragmatic compromise.
+
+It improves the analyser’s ability to describe rhythmic grounding while remaining easy to implement, easy to explain, and appropriate for a system built around a single drum pad and short turn windows.
+
+---
+
+### 6.13 Limitations
+
+Anchor Detection still does not model:
+
+- motif recurrence across a turn
+- learned stylistic expectations about strong beats
+- multi-instrument orchestration
+- higher-level phrase syntax beyond local salience and turn boundaries
+- culturally specific syncopation conventions
+
+The support layer should therefore be understood as a lightweight approximation of rhythmic grounding rather than a complete theory of metrical stability.
+
+More specialised ending behaviour remains the responsibility of End Activity, while broader recurring-structure analysis remains the responsibility of later features such as Repetition.
 
 ---
 
