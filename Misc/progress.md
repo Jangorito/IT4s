@@ -164,10 +164,10 @@ This unlocks:
 
 Do NOT move to ResponsePlanner until TurnAnalysisResult is fully working and inspectable.
 
-- [ ] Foundations
-- [ ] Density
-- [ ] Energy
-- [ ] Anchors
-- [ ] End Activity
-- [ ] SAP
+- [x] Foundations
+- [x] Density
+- [x] Energy
+- [x] Anchors
+- [x] End Activity
+- [x] SAP
 - [ ] Orchestrator
