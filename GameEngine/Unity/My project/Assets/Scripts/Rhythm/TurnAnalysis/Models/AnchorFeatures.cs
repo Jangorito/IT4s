@@ -16,6 +16,10 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
         public bool HasOpeningAnchor { get; private set; }
         public bool HasClosingAnchor { get; private set; }
         public IReadOnlyList<int> AnchorCountsPerSegment { get; private set; }
+        public float AverageSupport { get; private set; }
+        public float StrongHitRatio { get; private set; }
+        public float SupportedWeakHitRatio { get; private set; }
+        public float UnsupportedWeakHitRatio { get; private set; }
 
         public AnchorFeatures()
             : this(0, null, null, 0, null, null, 0f, false, false, null)
@@ -32,7 +36,11 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
             float strongestAnchorScore,
             bool hasOpeningAnchor,
             bool hasClosingAnchor,
-            IReadOnlyList<int> anchorCountsPerSegment)
+            IReadOnlyList<int> anchorCountsPerSegment,
+            float averageSupport = 0f,
+            float strongHitRatio = 0f,
+            float supportedWeakHitRatio = 0f,
+            float unsupportedWeakHitRatio = 0f)
         {
             StepCount = stepCount;
             StepSalienceScores = CopyOrEmpty(stepSalienceScores);
@@ -44,6 +52,10 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
             HasOpeningAnchor = hasOpeningAnchor;
             HasClosingAnchor = hasClosingAnchor;
             AnchorCountsPerSegment = CopyOrDefaultSegments(anchorCountsPerSegment);
+            AverageSupport = averageSupport;
+            StrongHitRatio = strongHitRatio;
+            SupportedWeakHitRatio = supportedWeakHitRatio;
+            UnsupportedWeakHitRatio = unsupportedWeakHitRatio;
         }
 
         private static IReadOnlyList<T> CopyOrEmpty<T>(IReadOnlyList<T> values)

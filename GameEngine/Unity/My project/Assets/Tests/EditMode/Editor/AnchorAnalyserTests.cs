@@ -24,6 +24,10 @@ namespace IT4s.Rhythm.TurnAnalysis.Tests
             Assert.That(features.HasOpeningAnchor, Is.False);
             Assert.That(features.HasClosingAnchor, Is.False);
             AssertIntList(features.AnchorCountsPerSegment, 0, 0, 0, 0);
+            Assert.That(features.AverageSupport, Is.EqualTo(0f));
+            Assert.That(features.StrongHitRatio, Is.EqualTo(0f));
+            Assert.That(features.SupportedWeakHitRatio, Is.EqualTo(0f));
+            Assert.That(features.UnsupportedWeakHitRatio, Is.EqualTo(0f));
         }
 
         [Test]
@@ -41,6 +45,10 @@ namespace IT4s.Rhythm.TurnAnalysis.Tests
             Assert.That(features.StrongestAnchorIndex, Is.Null);
             Assert.That(features.StrongestAnchorScore, Is.EqualTo(0f));
             AssertIntList(features.AnchorCountsPerSegment, 0, 0, 0, 0);
+            Assert.That(features.AverageSupport, Is.EqualTo(0f));
+            Assert.That(features.StrongHitRatio, Is.EqualTo(0f));
+            Assert.That(features.SupportedWeakHitRatio, Is.EqualTo(0f));
+            Assert.That(features.UnsupportedWeakHitRatio, Is.EqualTo(0f));
         }
 
         [Test]
@@ -60,6 +68,10 @@ namespace IT4s.Rhythm.TurnAnalysis.Tests
             Assert.That(features.HasOpeningAnchor, Is.True);
             Assert.That(features.HasClosingAnchor, Is.True);
             AssertIntList(features.AnchorCountsPerSegment, 1, 0, 0, 0);
+            Assert.That(features.AverageSupport, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(features.StrongHitRatio, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(features.SupportedWeakHitRatio, Is.EqualTo(0f));
+            Assert.That(features.UnsupportedWeakHitRatio, Is.EqualTo(0f));
         }
 
         [Test]
@@ -113,6 +125,34 @@ namespace IT4s.Rhythm.TurnAnalysis.Tests
         }
 
         [Test]
+        public void Analyze_SupportedWeakHits_ContributeToSupportSummaryWithoutChangingAnchorDetection()
+        {
+            var analyser = new AnchorAnalyser();
+
+            AnchorFeatures features = analyser.Analyze(TurnWithQuarterSubdivision(4, 127, 0, 96, 0, 88, 0, 72, 0));
+
+            AssertIntList(features.AnchorIndices, 0);
+            Assert.That(features.AnchorCount, Is.EqualTo(1));
+            Assert.That(features.AverageSupport, Is.EqualTo(0.725f).Within(0.0001f));
+            Assert.That(features.StrongHitRatio, Is.EqualTo(0.5f).Within(0.0001f));
+            Assert.That(features.SupportedWeakHitRatio, Is.EqualTo(0.5f).Within(0.0001f));
+            Assert.That(features.UnsupportedWeakHitRatio, Is.EqualTo(0f).Within(0.0001f));
+        }
+
+        [Test]
+        public void Analyze_UnsupportedWeakHits_AreReportedSeparatelyInSupportSummary()
+        {
+            var analyser = new AnchorAnalyser();
+
+            AnchorFeatures features = analyser.Analyze(TurnWithQuarterSubdivision(4, 0, 90, 0, 70, 0, 0, 0, 0, 65, 0, 55, 0, 0, 0, 0, 0));
+
+            Assert.That(features.AverageSupport, Is.EqualTo(0.15f).Within(0.0001f));
+            Assert.That(features.StrongHitRatio, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(features.SupportedWeakHitRatio, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(features.UnsupportedWeakHitRatio, Is.EqualTo(1f).Within(0.0001f));
+        }
+
+        [Test]
         public void Analyze_NullPattern_ThrowsArgumentNullException()
         {
             var analyser = new AnchorAnalyser();
@@ -124,6 +164,15 @@ namespace IT4s.Rhythm.TurnAnalysis.Tests
         {
             return new PatternTurn
             {
+                velocity = velocities
+            };
+        }
+
+        private static PatternTurn TurnWithQuarterSubdivision(int stepsPerQuarter, params int[] velocities)
+        {
+            return new PatternTurn
+            {
+                stepsPerQuarter = stepsPerQuarter,
                 velocity = velocities
             };
         }
