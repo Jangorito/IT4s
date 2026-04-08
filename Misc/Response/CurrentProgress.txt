@@ -1,0 +1,4 @@
+[ ] design realiser architecture
+[ ] then do a small planner doc pass
+[ ] then implement planner
+[ ] then implement realiser
