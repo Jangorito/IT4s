@@ -1,8 +1,13 @@
 using System;
+using System.Globalization;
 using IT4s.Data;
 using IT4s.Input;
 using IT4s.Rhythm;
+using IT4s.Rhythm.ResponsePlanning;
+using IT4s.Rhythm.ResponsePlanning.Models;
 using IT4s.Rhythm.Transformations;
+using IT4s.Rhythm.TurnAnalysis;
+using IT4s.Rhythm.TurnAnalysis.Models;
 using UnityEngine;
 
 namespace IT4s.Orchestration
@@ -93,6 +98,8 @@ namespace IT4s.Orchestration
         private HitBuffer hitBuffer;
         private PatternCompiler patternCompiler;
         private FeatureTransformer featureTransformer;
+        private TurnAnalyser turnAnalyser;
+        private IResponsePlanner responsePlanner;
         private MusicalTimingConfig currentMusicalTiming;
 
         // Only the controller may change phase. External systems can observe CurrentPhase,
@@ -112,6 +119,10 @@ namespace IT4s.Orchestration
         private bool hasLastTurnWindow;
         private PatternTurn lastCompiledPatternTurn;
         private bool hasLastCompiledPatternTurn;
+        private TurnAnalysisResult lastAnalysisResult;
+        private bool hasLastAnalysisResult;
+        private ResponsePlan currentResponsePlan;
+        private bool hasCurrentResponsePlan;
         private PatternTurn lastGeneratedAiPatternTurn;
         private bool hasLastGeneratedAiPatternTurn;
         private bool captureClockWarningIssued;
@@ -123,11 +134,17 @@ namespace IT4s.Orchestration
         public bool HasLastTurnWindow => hasLastTurnWindow;
         public PatternTurn LastCompiledPatternTurn => lastCompiledPatternTurn;
         public bool HasLastCompiledPatternTurn => hasLastCompiledPatternTurn;
+        public TurnAnalysisResult LastAnalysisResult => lastAnalysisResult;
+        public bool HasLastAnalysisResult => hasLastAnalysisResult;
+        public ResponsePlan CurrentResponsePlan => currentResponsePlan;
+        public bool HasCurrentResponsePlan => hasCurrentResponsePlan;
         public PatternTurn LastGeneratedAiPatternTurn => lastGeneratedAiPatternTurn;
         public bool HasLastGeneratedAiPatternTurn => hasLastGeneratedAiPatternTurn;
         public event Action<TurnPhase> OnPhaseChanged;
         public event Action<TurnWindow> OnHumanTurnCaptured;
         public event Action<PatternTurn> OnHumanPatternCompiled;
+        public event Action<TurnAnalysisResult> OnHumanTurnAnalysed;
+        public event Action<TurnAnalysisResult, ResponsePlan> OnResponsePlanned;
         public event Action<PatternTurn> OnAiPatternGenerated;
         public event Action<string> OnDebugMessage;
 
@@ -164,6 +181,8 @@ namespace IT4s.Orchestration
             PatternCompiler injectedPatternCompiler,
             IT4ChuckTurnPlayer injectedTurnPlayer,
             FeatureTransformer injectedFeatureTransformer,
+            TurnAnalyser injectedTurnAnalyser,
+            IResponsePlanner injectedResponsePlanner,
             MusicalTimingConfig initialTimingConfig,
             OscHitReceiver injectedHitReceiver = null)
         {
@@ -172,6 +191,8 @@ namespace IT4s.Orchestration
             patternCompiler = injectedPatternCompiler;
             aiTurnPlayer = injectedTurnPlayer;
             featureTransformer = injectedFeatureTransformer;
+            turnAnalyser = injectedTurnAnalyser;
+            responsePlanner = injectedResponsePlanner;
             hitReceiver = injectedHitReceiver != null ? injectedHitReceiver : hitReceiver;
 
             ResolveReceiverReference();
@@ -364,6 +385,8 @@ namespace IT4s.Orchestration
                 $"compiler={(patternCompiler != null ? "set" : "missing")}, " +
                 $"turnPlayer={(aiTurnPlayer != null ? "set" : "missing")}, " +
                 $"featureTransformer={(featureTransformer != null ? "set" : "missing")}, " +
+                $"turnAnalyser={(turnAnalyser != null ? "set" : "missing")}, " +
+                $"responsePlanner={(responsePlanner != null ? "set" : "missing")}, " +
                 $"timing={DescribeTimingState()}.";
         }
 
@@ -468,6 +491,18 @@ namespace IT4s.Orchestration
                 return false;
             }
 
+            if (turnAnalyser == null)
+            {
+                MoveToError("Turn loop cannot start because TurnAnalyser is missing.");
+                return false;
+            }
+
+            if (responsePlanner == null)
+            {
+                MoveToError("Turn loop cannot start because IResponsePlanner is missing.");
+                return false;
+            }
+
             if (aiTurnPlayer == null)
             {
                 MoveToError("Turn loop cannot start because IT4ChuckTurnPlayer is missing.");
@@ -535,6 +570,7 @@ namespace IT4s.Orchestration
             startSamples = triggerHit.tSamples;
             endSamples = startSamples + turnDurationSamples;
             captureClockWarningIssued = false;
+            ClearAnalysisAndPlanningState();
 
             EmitDebugMessage($"Human turn started at sample {startSamples}.");
             EmitDebugMessage(
@@ -646,9 +682,9 @@ namespace IT4s.Orchestration
                 return;
             }
 
-            if (featureTransformer == null)
+            if (turnAnalyser == null)
             {
-                MoveToError("GeneratingAiResponse failed because FeatureTransformer reference is missing.");
+                MoveToError("GeneratingAiResponse failed because TurnAnalyser reference is missing.");
                 return;
             }
 
@@ -656,8 +692,47 @@ namespace IT4s.Orchestration
                 $"AI response generation started for turn {lastCompiledPatternTurn.turnId}. " +
                 $"Source steps={lastCompiledPatternTurn.StepCount}, sampleRate={lastCompiledPatternTurn.sampleRate}.");
 
+            string currentOperation = "TurnAnalyser.Analyze";
+
             try
             {
+                TurnAnalysisResult analysis = turnAnalyser.Analyze(lastCompiledPatternTurn);
+
+                if (analysis == null)
+                {
+                    MoveToError(
+                        $"TurnAnalyser returned null when analysing turn {lastCompiledPatternTurn.turnId}.");
+                    return;
+                }
+
+                StoreAnalysisResult(analysis);
+
+                if (responsePlanner == null)
+                {
+                    MoveToError("GeneratingAiResponse failed because IResponsePlanner reference is missing.");
+                    return;
+                }
+
+                currentOperation = "IResponsePlanner.Plan";
+                ResponsePlan responsePlan = responsePlanner.Plan(analysis);
+
+                if (responsePlan == null)
+                {
+                    MoveToError(
+                        $"IResponsePlanner returned null when planning a response for turn {lastCompiledPatternTurn.turnId}.");
+                    return;
+                }
+
+                StoreResponsePlan(responsePlan);
+                EmitDebugMessage(FormatResponsePlanSummary(responsePlan));
+
+                if (featureTransformer == null)
+                {
+                    MoveToError("GeneratingAiResponse failed because FeatureTransformer reference is missing.");
+                    return;
+                }
+
+                currentOperation = "FeatureTransformer.Transform";
                 var generatedAiPattern = featureTransformer.Transform(lastCompiledPatternTurn);
 
                 if (generatedAiPattern == null)
@@ -685,6 +760,7 @@ namespace IT4s.Orchestration
                     return;
                 }
 
+                currentOperation = "IT4ChuckTurnPlayer.PlayTurn";
                 EmitDebugMessage($"Triggering AI playback for turn {lastGeneratedAiPatternTurn.turnId}.");
                 aiTurnPlayer.PlayTurn(lastGeneratedAiPatternTurn);
                 EmitDebugMessage(
@@ -694,7 +770,7 @@ namespace IT4s.Orchestration
             }
             catch (Exception ex)
             {
-                MoveToError($"Exception during FeatureTransformer.Transform: {ex.Message}");
+                MoveToError($"Exception during {currentOperation}: {ex.Message}");
             }
         }
 
@@ -721,12 +797,40 @@ namespace IT4s.Orchestration
 
         private void ClearGeneratedAiResponseState()
         {
+            ClearAnalysisAndPlanningState();
+
             if (lastGeneratedAiPatternTurn == null && !hasLastGeneratedAiPatternTurn)
             {
                 return;
             }
 
             StoreGeneratedAiPattern(null);
+        }
+
+        private void ClearAnalysisAndPlanningState()
+        {
+            ClearResponsePlanState();
+            ClearAnalysisResultState();
+        }
+
+        private void ClearAnalysisResultState()
+        {
+            if (lastAnalysisResult == null && !hasLastAnalysisResult)
+            {
+                return;
+            }
+
+            StoreAnalysisResult(null);
+        }
+
+        private void ClearResponsePlanState()
+        {
+            if (currentResponsePlan == null && !hasCurrentResponsePlan)
+            {
+                return;
+            }
+
+            StoreResponsePlan(null);
         }
 
         private void StoreCapturedTurnWindow(TurnWindow turnWindow)
@@ -741,6 +845,20 @@ namespace IT4s.Orchestration
             lastCompiledPatternTurn = pattern;
             hasLastCompiledPatternTurn = pattern != null;
             OnHumanPatternCompiled?.Invoke(pattern);
+        }
+
+        private void StoreAnalysisResult(TurnAnalysisResult analysis)
+        {
+            lastAnalysisResult = analysis;
+            hasLastAnalysisResult = analysis != null;
+            OnHumanTurnAnalysed?.Invoke(analysis);
+        }
+
+        private void StoreResponsePlan(ResponsePlan plan)
+        {
+            currentResponsePlan = plan;
+            hasCurrentResponsePlan = plan != null;
+            OnResponsePlanned?.Invoke(lastAnalysisResult, plan);
         }
 
         private void StoreGeneratedAiPattern(PatternTurn pattern)
@@ -789,6 +907,31 @@ namespace IT4s.Orchestration
             }
 
             return $"{currentMusicalTiming}, turnDurationSamples={currentMusicalTiming.GetTurnDurationSamples()}";
+        }
+
+        private static string FormatResponsePlanSummary(ResponsePlan plan)
+        {
+            if (plan == null)
+            {
+                return "Response plan: none.";
+            }
+
+            return
+                "Response plan: " +
+                $"ResponseType={plan.Type}, " +
+                $"TargetDensity={FormatPlanValue(plan.TargetDensity)}, " +
+                $"TargetEnergy={FormatPlanValue(plan.TargetEnergy)}, " +
+                $"PreserveAnchors={plan.PreserveAnchors}, " +
+                $"MirrorEnding={plan.MirrorEnding}, " +
+                $"VariationAmount={FormatPlanValue(plan.VariationAmount)}, " +
+                $"SyncopationBias={FormatPlanValue(plan.SyncopationBias)}, " +
+                $"ComplementarityBias={FormatPlanValue(plan.ComplementarityBias)}, " +
+                $"TurnLengthSteps={plan.TurnLengthSteps}.";
+        }
+
+        private static string FormatPlanValue(float value)
+        {
+            return value.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
         private void MoveToError(string reason)

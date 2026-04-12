@@ -1,7 +1,11 @@
 using IT4s.Input;
 using IT4s.Orchestration;
 using IT4s.Rhythm;
+using IT4s.Rhythm.ResponsePlanning;
 using IT4s.Rhythm.Transformations;
+using IT4s.Rhythm.TurnAnalysis;
+using IT4s.Rhythm.TurnAnalysis.Analysers;
+using IT4s.Rhythm.TurnAnalysis.Models;
 using UnityEngine;
 
 namespace IT4s.Bootstrap
@@ -14,6 +18,13 @@ namespace IT4s.Bootstrap
     public class TurnLoopBootstrap : MonoBehaviour
     {
         private const int BelaSampleRateHz = 44100;
+        private const float DefaultHighEnergyMeanVelocity = 90f;
+        private const float DefaultLowEnergyMeanVelocity = 10f;
+        private const float DefaultFlatVarianceThreshold = 1f;
+        private const float DefaultAccentPeakOverMeanThreshold = 45f;
+        private const float DefaultCrescendoMinDelta = 50f;
+        private const float DefaultDecrescendoMinDelta = 50f;
+        private const float DefaultShapeEpsilon = 0.02f;
 
         [Header("Scene Components")]
         [SerializeField] private TurnLoopController turnLoopController;
@@ -30,6 +41,8 @@ namespace IT4s.Bootstrap
 
         private PatternCompiler patternCompiler;
         private FeatureTransformer featureTransformer;
+        private TurnAnalyser turnAnalyser;
+        private IResponsePlanner responsePlanner;
         private MusicalTimingConfig initialTimingConfig;
 
         private void Awake()
@@ -42,6 +55,8 @@ namespace IT4s.Bootstrap
 
             patternCompiler = new PatternCompiler();
             featureTransformer = new FeatureTransformer();
+            turnAnalyser = CreateTurnAnalyser();
+            responsePlanner = new ResponsePlanner();
 
             initialTimingConfig = new MusicalTimingConfig(
                 bpm,
@@ -63,6 +78,8 @@ namespace IT4s.Bootstrap
                 patternCompiler,
                 aiTurnPlayer,
                 featureTransformer,
+                turnAnalyser,
+                responsePlanner,
                 initialTimingConfig,
                 oscHitReceiver);
 
@@ -106,6 +123,32 @@ namespace IT4s.Bootstrap
             }
 
             return true;
+        }
+
+        private static TurnAnalyser CreateTurnAnalyser()
+        {
+            return new TurnAnalyser(
+                new DensityAnalyser(),
+                new EnergyAnalyser(DefaultEnergyThresholds()),
+                new AnchorAnalyser(),
+                new EndActivityAnalyser(),
+                new SegmentActivityProfileAnalyser(DefaultSegmentActivityProfileThresholds()));
+        }
+
+        private static EnergyThresholds DefaultEnergyThresholds()
+        {
+            return new EnergyThresholds(
+                DefaultHighEnergyMeanVelocity,
+                DefaultLowEnergyMeanVelocity,
+                DefaultFlatVarianceThreshold,
+                DefaultAccentPeakOverMeanThreshold,
+                DefaultCrescendoMinDelta,
+                DefaultDecrescendoMinDelta);
+        }
+
+        private static SegmentActivityProfileThresholds DefaultSegmentActivityProfileThresholds()
+        {
+            return new SegmentActivityProfileThresholds(DefaultShapeEpsilon);
         }
     }
 }
