@@ -8,6 +8,7 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
         public DensityFeatures Density { get; private set; }
         public EnergyFeatures Energy { get; private set; }
         public AnchorFeatures Anchor { get; private set; }
+        public AnchorSupportFeatures AnchorSupport { get; private set; }
         public EndActivityFeatures EndActivity { get; private set; }
         public SegmentActivityProfileFeatures SegmentActivityProfile { get; private set; }
 
@@ -16,6 +17,7 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
                 new DensityFeatures(),
                 new EnergyFeatures(),
                 new AnchorFeatures(),
+                new AnchorSupportFeatures(),
                 new EndActivityFeatures(),
                 new SegmentActivityProfileFeatures())
         {
@@ -27,10 +29,28 @@ namespace IT4s.Rhythm.TurnAnalysis.Models
             AnchorFeatures anchor,
             EndActivityFeatures endActivity,
             SegmentActivityProfileFeatures segmentActivityProfile)
+            : this(
+                density,
+                energy,
+                anchor,
+                new AnchorSupportFeatures(),
+                endActivity,
+                segmentActivityProfile)
+        {
+        }
+
+        public TurnAnalysisResult(
+            DensityFeatures density,
+            EnergyFeatures energy,
+            AnchorFeatures anchor,
+            AnchorSupportFeatures anchorSupport,
+            EndActivityFeatures endActivity,
+            SegmentActivityProfileFeatures segmentActivityProfile)
         {
             Density = density ?? new DensityFeatures();
             Energy = energy ?? new EnergyFeatures();
             Anchor = anchor ?? new AnchorFeatures();
+            AnchorSupport = anchorSupport ?? new AnchorSupportFeatures();
             EndActivity = endActivity ?? new EndActivityFeatures();
             SegmentActivityProfile = segmentActivityProfile ?? new SegmentActivityProfileFeatures();
         }
