@@ -570,7 +570,7 @@ namespace IT4s.Orchestration
             startSamples = triggerHit.tSamples;
             endSamples = startSamples + turnDurationSamples;
             captureClockWarningIssued = false;
-            ClearAnalysisAndPlanningState();
+            ClearAnalysisAndPlanningRuntimeState();
 
             EmitDebugMessage($"Human turn started at sample {startSamples}.");
             EmitDebugMessage(
@@ -660,6 +660,7 @@ namespace IT4s.Orchestration
                 }
 
                 StoreCompiledHumanPattern(compiled);
+                ClearAnalysisAndPlanningRuntimeState();
                 ClearGeneratedAiResponseState();
 
                 EmitDebugMessage(
@@ -797,8 +798,6 @@ namespace IT4s.Orchestration
 
         private void ClearGeneratedAiResponseState()
         {
-            ClearAnalysisAndPlanningState();
-
             if (lastGeneratedAiPatternTurn == null && !hasLastGeneratedAiPatternTurn)
             {
                 return;
@@ -807,7 +806,7 @@ namespace IT4s.Orchestration
             StoreGeneratedAiPattern(null);
         }
 
-        private void ClearAnalysisAndPlanningState()
+        private void ClearAnalysisAndPlanningRuntimeState()
         {
             ClearResponsePlanState();
             ClearAnalysisResultState();
@@ -820,7 +819,8 @@ namespace IT4s.Orchestration
                 return;
             }
 
-            StoreAnalysisResult(null);
+            lastAnalysisResult = null;
+            hasLastAnalysisResult = false;
         }
 
         private void ClearResponsePlanState()
@@ -830,7 +830,8 @@ namespace IT4s.Orchestration
                 return;
             }
 
-            StoreResponsePlan(null);
+            currentResponsePlan = null;
+            hasCurrentResponsePlan = false;
         }
 
         private void StoreCapturedTurnWindow(TurnWindow turnWindow)
@@ -851,14 +852,22 @@ namespace IT4s.Orchestration
         {
             lastAnalysisResult = analysis;
             hasLastAnalysisResult = analysis != null;
-            OnHumanTurnAnalysed?.Invoke(analysis);
+
+            if (analysis != null)
+            {
+                OnHumanTurnAnalysed?.Invoke(analysis);
+            }
         }
 
         private void StoreResponsePlan(ResponsePlan plan)
         {
             currentResponsePlan = plan;
             hasCurrentResponsePlan = plan != null;
-            OnResponsePlanned?.Invoke(lastAnalysisResult, plan);
+
+            if (plan != null)
+            {
+                OnResponsePlanned?.Invoke(lastAnalysisResult, plan);
+            }
         }
 
         private void StoreGeneratedAiPattern(PatternTurn pattern)
@@ -943,6 +952,7 @@ namespace IT4s.Orchestration
 
             isRunning = false;
             ClearCaptureRuntimeState();
+            ClearAnalysisAndPlanningRuntimeState();
             ClearGeneratedAiResponseState();
             Debug.LogError($"[TurnLoopController] {reason}");
             SetPhase(TurnPhase.Error);

@@ -199,7 +199,7 @@ namespace IT4s.Orchestration.Tests
         }
 
         [Test]
-        public void ClearGeneratedAiResponseState_ClearsAnalysisPlanningAndGeneratedPatternState()
+        public void ClearGeneratedAiResponseState_ClearsOnlyGeneratedPatternState()
         {
             ControllerHarness harness = CreateHarness();
 
@@ -225,12 +225,88 @@ namespace IT4s.Orchestration.Tests
 
             InvokePrivateMethod(harness.Controller, "ClearGeneratedAiResponseState");
 
+            Assert.That(harness.Controller.HasLastAnalysisResult, Is.True);
+            Assert.That(harness.Controller.LastAnalysisResult, Is.Not.Null);
+            Assert.That(harness.Controller.HasCurrentResponsePlan, Is.True);
+            Assert.That(harness.Controller.CurrentResponsePlan, Is.Not.Null);
+            Assert.That(harness.Controller.HasLastGeneratedAiPatternTurn, Is.False);
+            Assert.That(harness.Controller.LastGeneratedAiPatternTurn, Is.Null);
+        }
+
+        [Test]
+        public void ClearAnalysisAndPlanningRuntimeState_ClearsFieldsWithoutRaisingCompletionEvents()
+        {
+            ControllerHarness harness = CreateHarness();
+            int analysisEventCount = 0;
+            int planningEventCount = 0;
+
+            harness.Controller.OnHumanTurnAnalysed += _ => analysisEventCount++;
+            harness.Controller.OnResponsePlanned += (_, _) => planningEventCount++;
+
+            InvokePrivateMethod(harness.Controller, "StoreAnalysisResult", new TurnAnalysisResult());
+            InvokePrivateMethod(
+                harness.Controller,
+                "StoreResponsePlan",
+                new ResponsePlan(
+                    ResponseType.Mirror,
+                    0.5f,
+                    0.5f,
+                    true,
+                    true,
+                    0.2f,
+                    0.2f,
+                    0.2f,
+                    16));
+
+            Assert.That(analysisEventCount, Is.EqualTo(1));
+            Assert.That(planningEventCount, Is.EqualTo(1));
+
+            InvokePrivateMethod(harness.Controller, "ClearAnalysisAndPlanningRuntimeState");
+
+            Assert.That(analysisEventCount, Is.EqualTo(1));
+            Assert.That(planningEventCount, Is.EqualTo(1));
             Assert.That(harness.Controller.HasLastAnalysisResult, Is.False);
             Assert.That(harness.Controller.LastAnalysisResult, Is.Null);
             Assert.That(harness.Controller.HasCurrentResponsePlan, Is.False);
             Assert.That(harness.Controller.CurrentResponsePlan, Is.Null);
+        }
+
+        [Test]
+        public void ClearGeneratedAiResponseState_DoesNotRaiseAnalysisOrPlanningCompletionEvents()
+        {
+            ControllerHarness harness = CreateHarness();
+            int analysisEventCount = 0;
+            int planningEventCount = 0;
+
+            harness.Controller.OnHumanTurnAnalysed += _ => analysisEventCount++;
+            harness.Controller.OnResponsePlanned += (_, _) => planningEventCount++;
+
+            InvokePrivateMethod(harness.Controller, "StoreAnalysisResult", new TurnAnalysisResult());
+            InvokePrivateMethod(
+                harness.Controller,
+                "StoreResponsePlan",
+                new ResponsePlan(
+                    ResponseType.Mirror,
+                    0.5f,
+                    0.5f,
+                    true,
+                    true,
+                    0.2f,
+                    0.2f,
+                    0.2f,
+                    16));
+            InvokePrivateMethod(harness.Controller, "StoreGeneratedAiPattern", CreateCompiledPatternTurn());
+
+            Assert.That(analysisEventCount, Is.EqualTo(1));
+            Assert.That(planningEventCount, Is.EqualTo(1));
+
+            InvokePrivateMethod(harness.Controller, "ClearGeneratedAiResponseState");
+
+            Assert.That(analysisEventCount, Is.EqualTo(1));
+            Assert.That(planningEventCount, Is.EqualTo(1));
+            Assert.That(harness.Controller.HasLastAnalysisResult, Is.True);
+            Assert.That(harness.Controller.HasCurrentResponsePlan, Is.True);
             Assert.That(harness.Controller.HasLastGeneratedAiPatternTurn, Is.False);
-            Assert.That(harness.Controller.LastGeneratedAiPatternTurn, Is.Null);
         }
 
         private ControllerHarness CreateHarness(
