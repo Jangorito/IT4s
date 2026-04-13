@@ -947,6 +947,7 @@ MonoBehaviour:
   humanPatternRenderer: {fileID: 846225787}
   aiPatternRenderer: {fileID: 60411587}
   showDebugUi: 1
+  showAiPatternPanel: 0
   maxPanelWidth: 980
   screenPadding: {x: 16, y: 16}
 --- !u!1 &2063823081

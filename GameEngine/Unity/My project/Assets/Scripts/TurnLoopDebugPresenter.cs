@@ -1,5 +1,6 @@
 using IT4s.Data;
 using IT4s.Orchestration;
+using IT4s.Rhythm.TurnAnalysis.Models;
 using UnityEngine;
 
 namespace IT4s.Debugging
@@ -14,6 +15,12 @@ namespace IT4s.Debugging
         private const float PanelPadding = 16f;
         private const float SectionSpacing = 12f;
         private const float SummaryHeight = 96f;
+        private const float SplitPanelSpacing = 16f;
+        private const float AnalysisTitleHeight = 22f;
+        private const float AnalysisMetaHeight = 18f;
+        private const float AnalysisTopSpacing = 8f;
+        private const float MinimumAnalysisHeight = 140f;
+        private const string AnalysisPanelTitle = "TURN ANALYSIS";
 
         [Header("Sources")]
         [SerializeField] private TurnLoopController turnLoopController;
@@ -24,6 +31,7 @@ namespace IT4s.Debugging
 
         [Header("Layout")]
         [SerializeField] private bool showDebugUi = true;
+        [SerializeField] private bool showAiPatternPanel = false;
         [SerializeField] private float maxPanelWidth = 980f;
         [SerializeField] private Vector2 screenPadding = new Vector2(16f, 16f);
 
@@ -31,17 +39,21 @@ namespace IT4s.Debugging
         private bool hasLastTurnWindow;
         private PatternTurn lastHumanPattern;
         private PatternTurn lastAiPattern;
+        private TurnAnalysisResult lastAnalysisResult;
+        private string lastAnalysisSummary = string.Empty;
         private TurnPhase currentPhase = TurnPhase.Transition;
 
         private GUIStyle headingStyle;
         private GUIStyle bodyStyle;
         private GUIStyle placeholderStyle;
+        private GUIStyle analysisTextStyle;
 
         public TurnPhase CurrentPhase => currentPhase;
         public bool HasLastTurnWindow => hasLastTurnWindow;
         public TurnWindow LastTurnWindow => lastTurnWindow;
         public PatternTurn LastHumanPattern => lastHumanPattern;
         public PatternTurn LastAiPattern => lastAiPattern;
+        public TurnAnalysisResult LastAnalysisResult => lastAnalysisResult;
 
         private void Awake()
         {
@@ -72,12 +84,19 @@ namespace IT4s.Debugging
         {
             lastHumanPattern = pattern;
             humanPatternRenderer?.SetPattern(pattern);
+            ClearAnalysisPresentation();
         }
 
         public void OnAiPatternGenerated(PatternTurn pattern)
         {
             lastAiPattern = pattern;
             aiPatternRenderer?.SetPattern(pattern);
+        }
+
+        public void OnHumanTurnAnalysed(TurnAnalysisResult analysis)
+        {
+            lastAnalysisResult = analysis;
+            lastAnalysisSummary = TurnAnalysisSummaryFormatter.Format(analysis);
         }
 
         public void OnPhaseChanged(TurnPhase phase)
@@ -102,12 +121,23 @@ namespace IT4s.Debugging
             DrawSummary(summaryRect);
             y += SummaryHeight + SectionSpacing;
 
+            float panelWidth = (width - SplitPanelSpacing) * 0.5f;
             float humanHeight = humanPatternRenderer != null
-                ? humanPatternRenderer.GetPreferredHeight(width)
+                ? humanPatternRenderer.GetPreferredHeight(panelWidth)
                 : 180f;
-            Rect humanRect = new Rect(x, y, width, humanHeight);
+            float analysisHeight = GetAnalysisPreferredHeight(panelWidth);
+            float comparisonHeight = Mathf.Max(humanHeight, analysisHeight);
+
+            Rect humanRect = new Rect(x, y, panelWidth, comparisonHeight);
+            Rect analysisRect = new Rect(x + panelWidth + SplitPanelSpacing, y, panelWidth, comparisonHeight);
             DrawPatternPanel(humanRect, humanPatternRenderer, "HUMAN PATTERN");
-            y += humanHeight + SectionSpacing;
+            DrawAnalysisPanel(analysisRect);
+            y += comparisonHeight + SectionSpacing;
+
+            if (!showAiPatternPanel)
+            {
+                return;
+            }
 
             float aiHeight = aiPatternRenderer != null
                 ? aiPatternRenderer.GetPreferredHeight(width)
@@ -154,6 +184,45 @@ namespace IT4s.Debugging
                     $"Timing: {turnLoopController.CurrentMusicalTiming}",
                     bodyStyle);
             }
+        }
+
+        private void DrawAnalysisPanel(Rect rect)
+        {
+            DrawFilledRect(rect, new Color(0.10f, 0.10f, 0.10f, 0.94f));
+            DrawOutline(rect, new Color(0.75f, 0.75f, 0.75f, 1f));
+
+            Rect contentRect = new Rect(
+                rect.x + PanelPadding,
+                rect.y + PanelPadding,
+                rect.width - (PanelPadding * 2f),
+                rect.height - (PanelPadding * 2f));
+
+            float y = contentRect.y;
+            GUI.Label(new Rect(contentRect.x, y, contentRect.width, AnalysisTitleHeight), AnalysisPanelTitle, headingStyle);
+            y += AnalysisTitleHeight;
+
+            string metaText = lastHumanPattern != null
+                ? $"Turn: {lastHumanPattern.turnId}  |  Steps: {lastHumanPattern.StepCount}  |  BPM: {lastHumanPattern.bpm:0.##}"
+                : "Waiting for a compiled human PatternTurn.";
+            GUI.Label(new Rect(contentRect.x, y, contentRect.width, AnalysisMetaHeight), metaText, bodyStyle);
+            y += AnalysisMetaHeight + AnalysisTopSpacing;
+
+            Rect textRect = new Rect(
+                contentRect.x,
+                y,
+                contentRect.width,
+                Mathf.Max(1f, contentRect.yMax - y));
+
+            if (lastAnalysisResult == null)
+            {
+                GUI.Label(
+                    textRect,
+                    "No TurnAnalysisResult available yet.\nCompile a turn to inspect the analyser output.",
+                    placeholderStyle);
+                return;
+            }
+
+            GUI.Label(textRect, lastAnalysisSummary, analysisTextStyle);
         }
 
         private void DrawPatternPanel(Rect rect, PatternTurnDebugRenderer renderer, string label)
@@ -215,6 +284,11 @@ namespace IT4s.Debugging
             {
                 OnAiPatternGenerated(turnLoopController.LastGeneratedAiPatternTurn);
             }
+
+            if (turnLoopController.HasLastAnalysisResult)
+            {
+                OnHumanTurnAnalysed(turnLoopController.LastAnalysisResult);
+            }
         }
 
         private void Subscribe()
@@ -227,6 +301,7 @@ namespace IT4s.Debugging
             turnLoopController.OnPhaseChanged += OnPhaseChanged;
             turnLoopController.OnHumanTurnCaptured += OnHumanTurnCaptured;
             turnLoopController.OnHumanPatternCompiled += OnPatternCompiled;
+            turnLoopController.OnHumanTurnAnalysed += OnHumanTurnAnalysed;
             turnLoopController.OnAiPatternGenerated += OnAiPatternGenerated;
         }
 
@@ -240,7 +315,30 @@ namespace IT4s.Debugging
             turnLoopController.OnPhaseChanged -= OnPhaseChanged;
             turnLoopController.OnHumanTurnCaptured -= OnHumanTurnCaptured;
             turnLoopController.OnHumanPatternCompiled -= OnPatternCompiled;
+            turnLoopController.OnHumanTurnAnalysed -= OnHumanTurnAnalysed;
             turnLoopController.OnAiPatternGenerated -= OnAiPatternGenerated;
+        }
+
+        private float GetAnalysisPreferredHeight(float width)
+        {
+            EnsureStyles();
+
+            float contentWidth = Mathf.Max(1f, width - (PanelPadding * 2f));
+            float height = (PanelPadding * 2f) + AnalysisTitleHeight + AnalysisMetaHeight + AnalysisTopSpacing;
+
+            if (lastAnalysisResult == null)
+            {
+                return Mathf.Max(height + 48f, MinimumAnalysisHeight);
+            }
+
+            height += analysisTextStyle.CalcHeight(new GUIContent(lastAnalysisSummary), contentWidth);
+            return Mathf.Max(height, MinimumAnalysisHeight);
+        }
+
+        private void ClearAnalysisPresentation()
+        {
+            lastAnalysisResult = null;
+            lastAnalysisSummary = string.Empty;
         }
 
         private void EnsureStyles()
@@ -268,6 +366,14 @@ namespace IT4s.Debugging
                 fontSize = 12,
                 wordWrap = true,
                 normal = { textColor = new Color(0.82f, 0.82f, 0.82f, 1f) }
+            };
+
+            analysisTextStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 12,
+                richText = true,
+                wordWrap = true,
+                normal = { textColor = Color.white }
             };
         }
 
