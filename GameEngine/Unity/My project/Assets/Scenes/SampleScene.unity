@@ -960,6 +960,7 @@ GameObject:
   - component: {fileID: 2063823083}
   - component: {fileID: 2063823082}
   - component: {fileID: 2063823084}
+  - component: {fileID: 2063823085}
   m_Layer: 0
   m_Name: Bootstrap
   m_TagString: Untagged
@@ -982,6 +983,7 @@ MonoBehaviour:
   mode: 0
   oscHitReceiver: {fileID: 1812478579}
   fakeBelaOscSender: {fileID: 657197625}
+  keyboardBelaOscEmulator: {fileID: 2063823085}
 --- !u!4 &2063823083
 Transform:
   m_ObjectHideFlags: 0
@@ -1018,6 +1020,40 @@ MonoBehaviour:
   barsPerTurn: 2
   stepsPerQuarter: 12
   sampleRate: 44100
+--- !u!114 &2063823085
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2063823081}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d99caa22d4f94c4cb8125d2d10fb48c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  transmitter: {fileID: 0}
+  remoteHost: 127.0.0.1
+  remotePort: 9000
+  oscAddress: /it4/hit
+  sampleRate: 44100
+  defaultVelocity: 100
+  repeatPolicy: 0
+  heldRepeatIntervalSeconds: 0.1
+  verboseLogging: 0
+  keyMappings:
+  - key: 97
+    pad: 0
+    velocityOverride: 72
+  - key: 115
+    pad: 1
+    velocityOverride: 90
+  - key: 100
+    pad: 2
+    velocityOverride: 108
+  - key: 102
+    pad: 3
+    velocityOverride: 124
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

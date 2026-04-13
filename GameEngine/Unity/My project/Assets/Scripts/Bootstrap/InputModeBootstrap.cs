@@ -4,22 +4,27 @@ namespace IT4s.Input
 {
     /// <summary>
     /// Chooses whether Unity should use live Bela OSC input
-    /// or the internal fake OSC test rig.
+    /// or one of the internal test-input rigs.
     ///
     /// LiveBelaOsc:
     /// - OscHitReceiver listens for incoming messages from Bela
-    /// - FakeBelaOscSender is disabled
+    /// - Internal senders are disabled
     ///
     /// FakeOscRig:
     /// - OscHitReceiver still listens as normal
     /// - FakeBelaOscSender is enabled and sends test hits into the same pipeline
+    ///
+    /// KeyboardOscEmulator:
+    /// - OscHitReceiver still listens as normal
+    /// - KeyboardBelaOscEmulator is enabled and sends Bela-compatible OSC hits from key presses
     /// </summary>
     public class InputModeBootstrap : MonoBehaviour
     {
         public enum InputMode
         {
             LiveBelaOsc,
-            FakeOscRig
+            FakeOscRig,
+            KeyboardOscEmulator
         }
 
         [Header("Mode")]
@@ -30,6 +35,7 @@ namespace IT4s.Input
 
         [Header("Optional Test Rig")]
         [SerializeField] private FakeBelaOscSender fakeBelaOscSender;
+        [SerializeField] private KeyboardBelaOscEmulator keyboardBelaOscEmulator;
 
         public InputMode Mode => mode;
 
@@ -49,16 +55,25 @@ namespace IT4s.Input
             {
                 case InputMode.LiveBelaOsc:
                     SetFakeRigEnabled(false);
+                    SetKeyboardEmulatorEnabled(false);
                     Debug.Log("[InputModeBootstrap] Mode = Live Bela OSC");
                     break;
 
                 case InputMode.FakeOscRig:
                     SetFakeRigEnabled(true);
+                    SetKeyboardEmulatorEnabled(false);
                     Debug.Log("[InputModeBootstrap] Mode = Fake OSC Rig");
+                    break;
+
+                case InputMode.KeyboardOscEmulator:
+                    SetFakeRigEnabled(false);
+                    SetKeyboardEmulatorEnabled(true);
+                    Debug.Log("[InputModeBootstrap] Mode = Keyboard OSC Emulator");
                     break;
 
                 default:
                     SetFakeRigEnabled(false);
+                    SetKeyboardEmulatorEnabled(false);
                     Debug.LogWarning("[InputModeBootstrap] Unknown mode. Defaulting to Live Bela OSC behaviour.");
                     break;
             }
@@ -73,6 +88,18 @@ namespace IT4s.Input
             else if (enabledState)
             {
                 Debug.LogWarning("[InputModeBootstrap] Fake mode selected, but no FakeBelaOscSender is assigned.");
+            }
+        }
+
+        private void SetKeyboardEmulatorEnabled(bool enabledState)
+        {
+            if (keyboardBelaOscEmulator != null)
+            {
+                keyboardBelaOscEmulator.enabled = enabledState;
+            }
+            else if (enabledState)
+            {
+                Debug.LogWarning("[InputModeBootstrap] Keyboard emulator mode selected, but no KeyboardBelaOscEmulator is assigned.");
             }
         }
     }
