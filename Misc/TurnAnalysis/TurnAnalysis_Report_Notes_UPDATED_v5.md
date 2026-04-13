@@ -316,7 +316,7 @@ Energy is therefore best understood as the system’s primary descriptor of dyna
 
 Anchor Detection identifies structurally salient hits within a turn.
 
-An anchor is defined as an active step whose computed salience score exceeds a fixed anchor threshold. In this architecture, salience represents the degree to which a hit stands out as a point of structural importance within the turn.
+An anchor is defined as an active step whose computed salience score meets or exceeds a fixed anchor threshold. In this updated model, salience represents the degree to which a hit stands out as a point of structural importance within the turn based on a weighted combination of dynamic, contextual, metrical, and phrase-role cues.
 
 This allows the system to move beyond describing how much activity occurs or how intense it is, and instead begin identifying which specific events matter most.
 
@@ -329,6 +329,7 @@ Anchor Detection is treated as an event-level salience feature family consisting
 - per-step salience scores
 - per-step binary anchor flags
 - aggregate anchor summaries
+- strongest-anchor summary
 - boundary-anchor indicators
 - segment-level anchor counts
 
@@ -350,34 +351,53 @@ In other words, Anchor Detection helps the system distinguish between a turn tha
 
 ---
 
-### 6.4 Salience Components
+### 6.4 Inputs and Assumptions
 
-Anchor salience is derived from four fixed components:
+The analyser operates directly on the compiled `PatternTurn` representation and expects access to:
 
-- absolute velocity
-- local accent
-- local isolation
-- positional bonus
+- `velocity`
+- `StepCount`
+- `bars`
+- `beatsPerBar`
 
-These components were chosen because they are lightweight, interpretable, and suitable for the project’s constrained input setting.
+The implementation assumes a 12-steps-per-quarter grid. Inactive steps are not scored as candidate anchors, but they still matter indirectly because surrounding silence affects local isolation.
 
-Absolute velocity captures raw emphasis.
-
-Local accent captures whether a hit stands out relative to nearby active hits.
-
-Local isolation captures whether a hit is exposed by surrounding space.
-
-Positional bonus captures the light additional structural importance often associated with turn openings and turn endings.
-
-Together, these components provide a practical approximation of event salience without requiring complex metrical assumptions or long-range motif analysis.
+This keeps the feature grounded in the same turn-level representation already used elsewhere in the analysis architecture, while still allowing modest structural reasoning from the available timing metadata.
 
 ---
 
-### 6.5 Salience Model
+### 6.5 Salience Components
 
-For each active step, a continuous salience score is computed as a weighted combination of the four components.
+Anchor salience is derived from five fixed components:
 
-For inactive steps, salience is always zero.
+- `VelocityScore`
+- `LocalAccentScore`
+- `IsolationScore`
+- `MetricalWeightScore`
+- `PhraseRoleScore`
+
+This is an important refinement over the earlier draft. The previous single positional bonus is replaced by two narrower structural terms: one for lightweight metrical placement and one for phrase-role relevance.
+
+Together, these components provide a practical approximation of event salience without requiring motif tracking, style-specific beat templates, or long-range phrase parsing.
+
+---
+
+### 6.6 Core Formula
+
+For each active step `i`, a continuous salience score is computed as:
+
+    AnchorSalience(i) =
+        0.30 * VelocityScore(i)
+      + 0.20 * LocalAccentScore(i)
+      + 0.15 * IsolationScore(i)
+      + 0.25 * MetricalWeightScore(i)
+      + 0.10 * PhraseRoleScore(i)
+
+The fixed decision threshold is:
+
+- `AnchorThreshold = 0.55`
+
+For inactive steps, salience remains zero.
 
 This score-first design is a deliberate architectural choice. Rather than classifying anchors directly, the system first estimates how anchor-like each active step is, then derives binary anchor flags from that score.
 
@@ -390,51 +410,135 @@ This has several advantages:
 
 ---
 
-### 6.6 Component Interpretation
+### 6.7 Velocity Score
 
-Absolute velocity is the strongest cue and provides the largest contribution to salience.
+`VelocityScore` normalises raw hit strength:
 
-Local accent captures contextual prominence rather than just raw loudness, allowing the system to recognise hits that stand out relative to neighbouring material.
+    VelocityScore(i) = Clamp01(velocity[i] / 127)
 
-Local isolation rewards hits surrounded by silence or inactivity, reflecting the musical intuition that exposed hits often feel structurally important.
-
-Positional bonus contributes only a light bias for the first and last active hits of a turn. This is intentionally modest. The purpose is not to impose a rigid metrical theory, but to acknowledge that openings and endings frequently carry phrase-level weight.
+This is the most direct cue of emphasis and carries the largest single weight in the model. It ensures that genuinely forceful hits remain central to anchor detection while still allowing other cues to shape the final result.
 
 ---
 
-### 6.7 Binary Anchor Decision
+### 6.8 Local Accent Score
+
+`LocalAccentScore` captures whether a hit stands out relative to nearby active neighbours. A local window of radius 2 is used around each step.
+
+Within that window, the mean velocity of active neighbouring hits is computed and only positive contrast is retained:
+
+    score = (v_i - localMean) / 127
+    LocalAccentScore(i) = Clamp01(score)
+
+This means the feature rewards contextual prominence without penalising quieter connective hits. It therefore captures accent-like behaviour rather than simple loudness.
+
+---
+
+### 6.9 Isolation Score
+
+`IsolationScore` measures how exposed a hit is within its local neighbourhood. Using the same radius-2 window, the analyser counts inactive neighbouring slots and divides by the number of available neighbour positions:
+
+    IsolationScore(i) = inactiveCount / totalNeighbourSlots
+
+This rewards hits that are surrounded by silence or low occupancy, reflecting the musical intuition that exposed events often feel structurally important even when they are not the loudest hits in the turn.
+
+---
+
+### 6.10 Metrical Weight Score
+
+`MetricalWeightScore` adds a lightweight beat-hierarchy cue derived from the turn metadata:
+
+    stepsPerBar = StepCount / bars
+    stepsPerBeat = stepsPerBar / beatsPerBar
+
+The score is then assigned using simple rules:
+
+- if `stepIndex % stepsPerBar == 0`, return `1.00`
+- else if `stepIndex % stepsPerBeat == 0`, return `0.75`
+- else if `stepsPerBeat` is even and `stepIndex % (stepsPerBeat / 2) == 0`, return `0.45`
+- else return `0.20`
+
+This is intentionally modest rather than theory-heavy. It gives the analyser a defensible sense of downbeats, beats, and half-beats without committing the system to a style-specific metrical model.
+
+---
+
+### 6.11 Phrase Role Score
+
+`PhraseRoleScore` adds a lightweight phrase-position cue. The analyser first precomputes the first and last active indices in the turn, then evaluates whether each step occupies an opening, midpoint, or closing role.
+
+For common turn lengths, the windows are defined as follows:
+
+If `StepCount = 48`:
+
+- opening: `0-11`
+- midpoint: `24-35`
+- closing: `36-47`
+
+If `StepCount = 96`:
+
+- opening: `0-11`
+- midpoint: `48-59`
+- closing: `84-95`
+
+The scoring logic is:
+
+- if the step is the first or last active hit, return `1.00`
+- else if the step falls in an opening or closing window, return `0.75`
+- else if the step falls in a midpoint window, return `0.45`
+- else return `0.00`
+
+This preserves a small amount of phrase awareness without turning anchor detection into a full phrase parser. It acknowledges that beginnings, endings, and central pivots often carry more structural weight than otherwise similar interior hits.
+
+---
+
+### 6.12 Binary Anchor Decision
 
 A step is classified as an anchor only if:
 
 - it is active
-- its salience score meets or exceeds the anchor threshold
+- its salience score meets or exceeds `0.55`
 
-This means not every strong hit becomes an anchor automatically. A hit generally needs support from more than one cue, such as strength plus isolation, or strength plus contextual prominence.
+This means not every strong hit becomes an anchor automatically. A hit usually needs support from more than one cue, such as strength plus metrical weight, or contextual prominence plus isolation.
 
 This produces the intended sparse-to-moderate anchor behaviour: anchors should be selective and meaningful, rather than common enough to dilute the signal.
 
 ---
 
-### 6.8 Output Representation
+### 6.13 Processing Loop
+
+The extraction loop follows a simple deterministic pattern:
+
+- skip any step whose velocity is less than or equal to zero
+- compute the weighted salience score for each active step
+- store the score in the per-step salience array
+- if the score meets the threshold, mark the step as an anchor, record its index, and update the strongest-anchor summary
+
+First and last active indices can be precomputed once before scoring, and segment counts can be accumulated through the shared segment-partition logic already used elsewhere.
+
+This single-pass design keeps the analyser efficient and easy to reason about, which is especially important for real-time use and dissertation transparency.
+
+---
+
+### 6.14 Output Representation
 
 The feature family should expose:
 
-- a salience score for every step
-- a binary anchor flag for every step
-- the set of anchor indices
-- the total anchor count
-- the strongest anchor and its score
-- whether the turn begins with an anchor
-- whether the turn ends with an anchor
-- anchor counts per segment
+- `StepSalienceScores`
+- `StepIsAnchor`
+- `AnchorCount`
+- `AnchorIndices`
+- `StrongestAnchorIndex`
+- `StrongestAnchorScore`
+- `HasOpeningAnchor`
+- `HasClosingAnchor`
+- `AnchorCountsPerSegment`
 
 This output structure is important because it supports both immediate planner use and later inspection. The planner may reason over compact summaries such as strongest anchor or opening/closing anchor status, while debugging tools can still inspect the full step-level salience profile.
 
 ---
 
-### 6.9 Segment Alignment
+### 6.15 Segment Alignment
 
-Anchor summaries should use the same four-segment partitioning scheme already established for density and energy.
+Anchor summaries should use the same four-segment partitioning scheme already established for density and energy, with `AnchorCountsPerSegment` ideally reusing the shared `SegmentHelper`.
 
 This ensures temporal alignment across feature families. For example, the system can later reason about whether a turn becomes denser, louder, and more anchor-heavy toward its ending, all within the same shared temporal frame.
 
@@ -442,7 +546,7 @@ Maintaining this consistency also improves dissertation clarity, since the reade
 
 ---
 
-### 6.10 Musical Interpretation
+### 6.16 Musical Interpretation
 
 Anchor Detection provides the system with a first layer of phrase-structural awareness.
 
@@ -455,46 +559,73 @@ but also:
 
 - which hits mattered most
 
-This is musically useful because salient events often define the remembered shape of a short rhythmic phrase. A player may include many hits, but only a few may function as the moments that characterise the gesture.
+This is musically useful because salient events often define the remembered shape of a short rhythmic phrase. A player may include many hits, but only a few may function as the moments that characterise the gesture. By combining dynamic, contextual, metrical, and phrase-role cues, the analyser can treat certain hits as points of arrival, framing, or pivot rather than as ordinary activity.
 
 Anchor Detection therefore helps the AI respond to the identity of the phrase rather than only to its surface statistics.
 
 ---
 
-### 6.11 Design Rationale
+### 6.17 Design Rationale
 
-The v1 design is intentionally conservative.
+The updated design remains intentionally conservative.
 
 It avoids:
 
-- heavy dependence on beat-strength templates
-- style-specific metrical rules
 - long-range repetition logic
+- heavy dependence on style-specific metrical templates
 - complex probabilistic salience modelling
+- multi-instrument orchestration assumptions
 
 Instead, it uses only cues that are strongly defensible given the available input:
 
 - hit strength
 - local contrast
 - local spacing
-- turn-boundary relevance
+- basic metrical location
+- light phrase-boundary relevance
 
-This makes the feature practical to implement, easy to explain, and appropriate for a system built around a single drum pad and short turn windows.
+Splitting the earlier positional bonus into `MetricalWeightScore` and `PhraseRoleScore` improves interpretability without sacrificing simplicity. This makes the feature practical to implement, easy to explain, and appropriate for a system built around a single drum pad and short turn windows.
 
 ---
 
-### 6.12 Limitations
+### 6.18 Constraints
+
+The implementation should remain:
+
+- `O(n)` in runtime
+- deterministic
+- free of external dependencies
+- free of per-step allocations inside the main loop other than the required output arrays
+
+These constraints help keep the analyser suitable for real-time turn analysis while preserving implementation clarity.
+
+---
+
+### 6.19 Limitations
 
 Anchor Detection does not yet model:
 
 - motif recurrence across a turn
-- stylistic expectations about strong beats
+- adaptive or relative thresholding
+- stylistic expectations about syncopation beyond a simple beat hierarchy
 - multi-instrument orchestration
-- higher-level phrase syntax beyond local salience and turn boundaries
+- higher-level phrase syntax beyond local salience, metrical placement, and fixed phrase-role windows
 
 It should therefore be understood as a lightweight structural salience model rather than a complete theory of musical importance.
 
 More specialised ending behaviour remains the responsibility of End Activity, while broader recurring-structure analysis remains the responsibility of later features such as Repetition.
+
+---
+
+### 6.20 Future Extensions
+
+Possible later refinements include:
+
+- relative thresholding or top-k anchor selection
+- repetition score integration
+- adaptive component weighting
+- broader phrase-role templates for non-48-step and non-96-step turns
+- tighter interaction with planner-level motif handling
 
 ---
 

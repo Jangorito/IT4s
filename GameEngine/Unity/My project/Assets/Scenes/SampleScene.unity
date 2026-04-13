@@ -981,7 +981,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ad0d1351679d10045a3517a4e6c148b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  mode: 0
+  mode: 2
   oscHitReceiver: {fileID: 1812478579}
   fakeBelaOscSender: {fileID: 657197625}
   keyboardBelaOscEmulator: {fileID: 2063823085}
