@@ -12,7 +12,7 @@ namespace IT4s.Rhythm.ResponsePlanning
         public float HighEnergyThreshold { get; set; } = 0.70f;
 
         public int MeaningfulAnchorCountThreshold { get; set; } = 1;
-        public float MeaningfulAnchorScoreThreshold { get; set; } = 0.60f;
+        public float MeaningfulAnchorScoreThreshold { get; set; } = 0.65f;
 
         public float StrongEndingDensityThreshold { get; set; } = 0.50f;
         public float StrongEndingEnergyThreshold { get; set; } = 0.60f;

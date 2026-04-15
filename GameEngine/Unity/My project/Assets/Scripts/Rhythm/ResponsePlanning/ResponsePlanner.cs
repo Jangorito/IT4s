@@ -70,7 +70,10 @@ namespace IT4s.Rhythm.ResponsePlanning
             bool isBusy = sourceDensity >= config.BusyDensityThreshold;
             bool isLowEnergy = energy.IsLowEnergy || sourceEnergy <= config.LowEnergyThreshold;
             bool isHighEnergy = energy.IsHighEnergy || sourceEnergy >= config.HighEnergyThreshold;
-            bool hasConversationalSpace = sourceDensity <= config.ConversationalSpaceDensityThreshold;
+            bool hasConversationalSpace =
+                sourceDensity > config.SparseDensityThreshold &&
+                sourceDensity <= config.ConversationalSpaceDensityThreshold &&
+                !endingIsOpen;
             bool isCongested = sourceDensity >= config.CongestedDensityThreshold || (isBusy && isHighEnergy);
             bool isPredictableProfile = IsPredictableShape(profile.DensityShape) || IsPredictableShape(profile.EnergyShape);
 
@@ -273,6 +276,14 @@ namespace IT4s.Rhythm.ResponsePlanning
 
         private static float ScoreContrast(PlanningContext context, ResponsePlannerConfig config)
         {
+            bool hasProfileReason =
+                context.IsPredictableProfile ||
+                context.ActivityIsBackLoaded ||
+                context.ActivityIsFrontLoaded;
+
+            if (!hasProfileReason)
+                return -config.PredictableProfileScore * 0.25f;
+
             float score = 0f;
             if (context.IsPredictableProfile) score += config.PredictableProfileScore;
             if (context.ActivityIsBackLoaded || context.ActivityIsFrontLoaded) score += config.ProfileRefinementScore;
