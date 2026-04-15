@@ -24,8 +24,17 @@ namespace IT4s.Rhythm.ResponsePlanning
         public float MinTargetDensity { get; set; } = 0.10f;
         public float MaxTargetDensity { get; set; } = 0.80f;
 
+        public float DensityPrimaryScore { get; set; } = 2.5f;
+        public float EnergyPrimaryScore { get; set; } = 2.0f;
+        public float AnchorRefinementScore { get; set; } = 1.0f;
+        public float EndingRefinementScore { get; set; } = 1.25f;
+        public float ProfileRefinementScore { get; set; } = 0.75f;
+        public float ConversationalSpaceScore { get; set; } = 1.0f;
+        public float CongestionScore { get; set; } = 1.0f;
+        public float PredictableProfileScore { get; set; } = 1.0f;
+
         public float DensityContextAdjustment { get; set; } = 0.05f;
         public float ComplementarityAdjustment { get; set; } = 0.05f;
-        public float ScoreTieMargin { get; set; } = 0.001f;
+        public float ScoreTieMargin { get; set; } = 0.25f;
     }
 }

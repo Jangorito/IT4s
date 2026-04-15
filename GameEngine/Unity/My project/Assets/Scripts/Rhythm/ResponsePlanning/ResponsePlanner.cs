@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using IT4s.Rhythm.ResponsePlanning.Models;
 using IT4s.Rhythm.TurnAnalysis.Models;
 
@@ -7,6 +8,7 @@ namespace IT4s.Rhythm.ResponsePlanning
     public sealed class ResponsePlanner : IResponsePlanner
     {
         private const float MaxVelocity = 127f;
+        private const float ScoreEqualityEpsilon = 0.0001f;
         private readonly ResponsePlannerConfig config;
 
         public ResponsePlanner()
@@ -25,8 +27,8 @@ namespace IT4s.Rhythm.ResponsePlanning
                 throw new ArgumentNullException(nameof(analysis));
 
             PlanningContext context = BuildContext(analysis, config);
-            ResponseType responseType = ChooseResponseType(context);
-            return DerivePlan(context, responseType);
+            ResponseType responseType = ChooseResponseType(context, config);
+            return DerivePlan(context, responseType, config);
         }
 
         private static PlanningContext BuildContext(TurnAnalysisResult analysis, ResponsePlannerConfig config)
@@ -86,55 +88,24 @@ namespace IT4s.Rhythm.ResponsePlanning
                 GetTurnLengthSteps(analysis));
         }
 
-        private ResponseType ChooseResponseType(PlanningContext context)
+        private static ResponseType ChooseResponseType(PlanningContext context, ResponsePlannerConfig config)
         {
-            float mirrorScore = ScoreMirror(context);
-            float complementScore = ScoreComplement(context);
-            float simplifyScore = ScoreSimplify(context);
-            float intensifyScore = ScoreIntensify(context);
-            float contrastScore = ScoreContrast(context);
-            float fillScore = ScoreFill(context);
-            float bestScore = GetBestScore(mirrorScore, complementScore, simplifyScore, intensifyScore, contrastScore, fillScore);
+            Dictionary<ResponseType, float> scores = ScoreResponseTypes(context, config);
+            float bestScore = GetBestScore(scores);
+            List<ResponseType> candidates = GetCloseScoreCandidates(scores, bestScore, config.ScoreTieMargin);
 
-            bool mirrorTop = IsTopScore(mirrorScore, bestScore);
-            bool complementTop = IsTopScore(complementScore, bestScore);
-            bool simplifyTop = IsTopScore(simplifyScore, bestScore);
-            bool intensifyTop = IsTopScore(intensifyScore, bestScore);
-            bool contrastTop = IsTopScore(contrastScore, bestScore);
-            bool fillTop = IsTopScore(fillScore, bestScore);
+            if (candidates.Count == 1)
+                return candidates[0];
 
-            if (complementTop && mirrorTop && context.HasMeaningfulGaps)
-                return ResponseType.Complement;
-
-            if (fillTop && intensifyTop && context.EndingIsOpen)
-                return ResponseType.Fill;
-
-            if (simplifyTop && contrastTop && context.IsBusy)
-                return ResponseType.Simplify;
-
-            if (mirrorTop && contrastTop && context.HasMeaningfulAnchors)
-                return ResponseType.Mirror;
-
-            if (mirrorTop)
-                return ResponseType.Mirror;
-            if (complementTop)
-                return ResponseType.Complement;
-            if (simplifyTop)
-                return ResponseType.Simplify;
-            if (intensifyTop)
-                return ResponseType.Intensify;
-            if (contrastTop)
-                return ResponseType.Contrast;
-
-            return ResponseType.Fill;
+            return ResolveCloseScoreTie(candidates, scores, context, config);
         }
 
-        private ResponsePlan DerivePlan(PlanningContext context, ResponseType responseType)
+        private ResponsePlan DerivePlan(PlanningContext context, ResponseType responseType, ResponsePlannerConfig config)
         {
             ResponsePlan plan = new ResponsePlan(
                 responseType,
-                DeriveTargetDensity(context, responseType),
-                DeriveComplementarityBias(context, responseType),
+                DeriveTargetDensity(context, responseType, config),
+                DeriveComplementarityBias(context, responseType, config),
                 DerivePreserveAnchors(context, responseType),
                 DeriveMirrorEnding(context, responseType),
                 context.TurnLengthSteps);
@@ -150,17 +121,17 @@ namespace IT4s.Rhythm.ResponsePlanning
                 turnLengthSteps: Math.Max(1, plan.TurnLengthSteps));
         }
 
-        private float DeriveTargetDensity(PlanningContext context, ResponseType responseType)
+        private float DeriveTargetDensity(PlanningContext context, ResponseType responseType, ResponsePlannerConfig config)
         {
             float density = context.SourceDensity + GetDensityDelta(responseType) + GetDensityContextModifier(context, responseType);
             return Clamp(density, config.MinTargetDensity, config.MaxTargetDensity);
         }
 
-        private float DeriveComplementarityBias(PlanningContext context, ResponseType responseType)
+        private float DeriveComplementarityBias(PlanningContext context, ResponseType responseType, ResponsePlannerConfig config)
         {
             float bias = GetBaselineComplementarityBias(responseType);
 
-            if (context.IsCongested || context.HasMeaningfulGaps)
+            if (context.IsCongested || context.HasConversationalSpace)
                 bias += config.ComplementarityAdjustment;
 
             if (context.HasMeaningfulAnchors)
@@ -202,74 +173,246 @@ namespace IT4s.Rhythm.ResponsePlanning
             return context.HasStrongEnding && responseType == ResponseType.Mirror;
         }
 
-        private static float ScoreMirror(PlanningContext context)
+        private static Dictionary<ResponseType, float> ScoreResponseTypes(PlanningContext context, ResponsePlannerConfig config)
+        {
+            return new Dictionary<ResponseType, float>
+            {
+                [ResponseType.Mirror] = ScoreMirror(context, config),
+                [ResponseType.Complement] = ScoreComplement(context, config),
+                [ResponseType.Simplify] = ScoreSimplify(context, config),
+                [ResponseType.Intensify] = ScoreIntensify(context, config),
+                [ResponseType.Contrast] = ScoreContrast(context, config),
+                [ResponseType.Fill] = ScoreFill(context, config)
+            };
+        }
+
+        private static float ScoreMirror(PlanningContext context, ResponsePlannerConfig config)
         {
             float score = 0f;
-            if (context.IsBalancedDensity) score += 2f;
-            if (context.IsMediumEnergy) score += 1f;
-            if (context.HasMeaningfulAnchors) score += 2f;
-            if (context.HasStrongEnding) score += 2f;
-            if (context.EndingIsOpen) score -= 1f;
+            if (context.IsBalancedDensity) score += config.DensityPrimaryScore;
+            if (context.IsMediumEnergy) score += config.EnergyPrimaryScore;
+            if (context.HasMeaningfulAnchors) score += config.AnchorRefinementScore;
+            if (context.HasStrongEnding) score += config.EndingRefinementScore;
+            if (context.ActivityIsBalanced) score += config.ProfileRefinementScore;
+            if (context.EndingIsOpen) score -= config.EndingRefinementScore;
+            if (context.IsPredictableProfile) score -= config.ProfileRefinementScore * 0.5f;
             return score;
         }
 
-        private static float ScoreComplement(PlanningContext context)
+        private static float ScoreComplement(PlanningContext context, ResponsePlannerConfig config)
         {
             float score = 0f;
-            if (context.IsSparse) score += 1f;
-            if (context.IsBalancedDensity) score += 1f;
-            if (context.IsMediumEnergy) score += 1f;
-            if (context.HasMeaningfulAnchors) score += 2f;
-            else score -= 0.5f;
-            if (context.HasMeaningfulGaps) score += 1f;
-            if (!context.HasStrongEnding) score += 1f;
-            if (context.ActivityIsBackLoaded || context.ActivityIsFrontLoaded) score += 0.5f;
+            if (context.IsBalancedDensity) score += config.DensityPrimaryScore * 0.75f;
+            if (context.IsMediumEnergy) score += config.EnergyPrimaryScore * 0.75f;
+            if (context.HasMeaningfulAnchors) score += config.AnchorRefinementScore;
+            else score -= config.AnchorRefinementScore * 0.5f;
+            if (context.HasConversationalSpace) score += config.ConversationalSpaceScore;
+            if (!context.HasStrongEnding) score += config.EndingRefinementScore * 0.5f;
+            if (context.ActivityIsBalanced) score += config.ProfileRefinementScore;
+            if (context.IsBusy) score -= config.DensityPrimaryScore * 0.5f;
             return score;
         }
 
-        private static float ScoreSimplify(PlanningContext context)
+        private static float ScoreSimplify(PlanningContext context, ResponsePlannerConfig config)
         {
             float score = 0f;
-            if (context.IsBusy) score += 3f;
-            if (context.IsHighEnergy) score += 2f;
-            if (context.HasMeaningfulAnchors) score += 1f;
-            if (context.IsCongested) score += 1f;
-            if (context.IsSparse) score -= 2f;
-            if (context.IsLowEnergy) score -= 1f;
+            if (context.IsBusy) score += config.DensityPrimaryScore;
+            if (context.IsHighEnergy) score += config.EnergyPrimaryScore;
+            if (context.IsCongested) score += config.CongestionScore;
+            if (context.IsPredictableProfile) score += config.ProfileRefinementScore * 0.5f;
+            if (context.IsSparse) score -= config.DensityPrimaryScore;
+            if (context.IsLowEnergy) score -= config.EnergyPrimaryScore * 0.5f;
             return score;
         }
 
-        private static float ScoreIntensify(PlanningContext context)
+        private static float ScoreIntensify(PlanningContext context, ResponsePlannerConfig config)
         {
             float score = 0f;
-            if (context.IsSparse) score += 2f;
-            if (context.IsLowEnergy) score += 2f;
-            if (!context.HasMeaningfulAnchors) score += 1f;
-            if (context.EndingIsOpen) score += 1f;
-            if (context.IsBusy) score -= 1f;
+            if (context.IsSparse) score += config.DensityPrimaryScore;
+            if (context.IsLowEnergy) score += config.EnergyPrimaryScore;
+            else if (context.IsMediumEnergy) score += config.EnergyPrimaryScore * 0.5f;
+            if (!context.HasMeaningfulAnchors) score += config.AnchorRefinementScore * 0.5f;
+            if (!context.HasStrongEnding) score += config.EndingRefinementScore * 0.5f;
+            if (context.IsBusy) score -= config.DensityPrimaryScore * 0.75f;
+            if (context.IsCongested) score -= config.CongestionScore;
             return score;
         }
 
-        private static float ScoreContrast(PlanningContext context)
+        private static float ScoreContrast(PlanningContext context, ResponsePlannerConfig config)
         {
             float score = 0f;
-            if (context.IsBusy) score += 2f;
-            if (context.IsHighEnergy) score += 1f;
-            if (!context.HasMeaningfulAnchors) score += 1f;
-            if (context.ActivityIsBackLoaded || context.ActivityIsFrontLoaded) score += 2f;
-            if (context.HasMeaningfulAnchors) score -= 1f;
+            if (context.IsPredictableProfile) score += config.PredictableProfileScore;
+            if (context.ActivityIsBackLoaded || context.ActivityIsFrontLoaded) score += config.ProfileRefinementScore;
+            if (context.IsHighEnergy) score += config.EnergyPrimaryScore * 0.5f;
+            if (context.IsBalancedDensity || context.IsBusy) score += config.DensityPrimaryScore * 0.25f;
+            if (!context.HasMeaningfulAnchors) score += config.AnchorRefinementScore * 0.5f;
+            if (context.HasMeaningfulAnchors) score -= config.AnchorRefinementScore;
+            if (context.ActivityIsBalanced) score -= config.ProfileRefinementScore * 0.5f;
+            if (!context.IsPredictableProfile) score -= config.PredictableProfileScore * 0.5f;
             return score;
         }
 
-        private static float ScoreFill(PlanningContext context)
+        private static float ScoreFill(PlanningContext context, ResponsePlannerConfig config)
         {
             float score = 0f;
-            if (context.IsSparse) score += 2f;
-            if (context.IsLowEnergy) score += 1f;
-            if (context.EndingIsOpen) score += 3f;
-            if (context.ActivityIsBackLoaded) score += 1f;
-            if (context.HasStrongEnding) score -= 1f;
+            if (context.IsSparse) score += config.DensityPrimaryScore;
+            if (context.EndingIsOpen) score += config.EndingRefinementScore * 1.5f;
+            else if (!context.HasStrongEnding) score += config.EndingRefinementScore * 0.5f;
+            if (context.ActivityIsBackLoaded) score += config.ProfileRefinementScore;
+            if (context.IsLowEnergy) score += config.EnergyPrimaryScore * 0.5f;
+            if (context.HasStrongEnding) score -= config.EndingRefinementScore;
+            if (context.IsBusy) score -= config.DensityPrimaryScore * 0.5f;
             return score;
+        }
+
+        private static float GetBestScore(IReadOnlyDictionary<ResponseType, float> scores)
+        {
+            float bestScore = float.MinValue;
+
+            foreach (KeyValuePair<ResponseType, float> entry in scores)
+            {
+                if (entry.Value > bestScore)
+                    bestScore = entry.Value;
+            }
+
+            return bestScore;
+        }
+
+        private static List<ResponseType> GetCloseScoreCandidates(
+            IReadOnlyDictionary<ResponseType, float> scores,
+            float bestScore,
+            float tieMargin)
+        {
+            var candidates = new List<ResponseType>(scores.Count);
+
+            foreach (KeyValuePair<ResponseType, float> entry in scores)
+            {
+                if (bestScore - entry.Value <= tieMargin)
+                    candidates.Add(entry.Key);
+            }
+
+            return candidates;
+        }
+
+        private static ResponseType ResolveCloseScoreTie(
+            IReadOnlyList<ResponseType> candidates,
+            IReadOnlyDictionary<ResponseType, float> scores,
+            PlanningContext context,
+            ResponsePlannerConfig config)
+        {
+            if (ContainsPair(candidates, ResponseType.Complement, ResponseType.Mirror) &&
+                IsConversationalGapPlayUseful(context))
+            {
+                return ResponseType.Complement;
+            }
+
+            if (ContainsPair(candidates, ResponseType.Simplify, ResponseType.Contrast) &&
+                context.SourceDensity >= config.CongestedDensityThreshold)
+            {
+                return ResponseType.Simplify;
+            }
+
+            if (ContainsPair(candidates, ResponseType.Fill, ResponseType.Intensify) &&
+                IsWeakClosurePrimaryIssue(context))
+            {
+                return ResponseType.Fill;
+            }
+
+            if (ContainsCandidate(candidates, ResponseType.Mirror) &&
+                HasBalancedAnchoredIdentity(context))
+            {
+                return ResponseType.Mirror;
+            }
+
+            return SelectHighestScoringCandidate(candidates, scores);
+        }
+
+        private static ResponseType SelectHighestScoringCandidate(
+            IReadOnlyList<ResponseType> candidates,
+            IReadOnlyDictionary<ResponseType, float> scores)
+        {
+            ResponseType bestType = candidates[0];
+            float bestScore = scores[bestType];
+
+            for (int i = 1; i < candidates.Count; i++)
+            {
+                ResponseType candidate = candidates[i];
+                float candidateScore = scores[candidate];
+
+                if (candidateScore > bestScore + ScoreEqualityEpsilon)
+                {
+                    bestType = candidate;
+                    bestScore = candidateScore;
+                    continue;
+                }
+
+                if (Math.Abs(candidateScore - bestScore) <= ScoreEqualityEpsilon &&
+                    GetStableTiePreference(candidate) < GetStableTiePreference(bestType))
+                {
+                    bestType = candidate;
+                    bestScore = candidateScore;
+                }
+            }
+
+            return bestType;
+        }
+
+        private static bool ContainsPair(IReadOnlyList<ResponseType> candidates, ResponseType first, ResponseType second)
+        {
+            return ContainsCandidate(candidates, first) && ContainsCandidate(candidates, second);
+        }
+
+        private static bool ContainsCandidate(IReadOnlyList<ResponseType> candidates, ResponseType candidate)
+        {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (candidates[i] == candidate)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsConversationalGapPlayUseful(PlanningContext context)
+        {
+            return context.HasConversationalSpace &&
+                context.HasMeaningfulAnchors &&
+                context.IsBalancedDensity &&
+                !context.EndingIsOpen;
+        }
+
+        private static bool IsWeakClosurePrimaryIssue(PlanningContext context)
+        {
+            return context.EndingIsOpen ||
+                (!context.HasStrongEnding && context.ActivityIsBackLoaded);
+        }
+
+        private static bool HasBalancedAnchoredIdentity(PlanningContext context)
+        {
+            return context.HasMeaningfulAnchors &&
+                context.IsBalancedDensity &&
+                !context.EndingIsOpen;
+        }
+
+        private static int GetStableTiePreference(ResponseType responseType)
+        {
+            switch (responseType)
+            {
+                case ResponseType.Mirror:
+                    return 0;
+                case ResponseType.Complement:
+                    return 1;
+                case ResponseType.Simplify:
+                    return 2;
+                case ResponseType.Intensify:
+                    return 3;
+                case ResponseType.Fill:
+                    return 4;
+                case ResponseType.Contrast:
+                    return 5;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
+            }
         }
 
         private float GetDensityDelta(ResponseType responseType)
@@ -324,24 +467,6 @@ namespace IT4s.Rhythm.ResponsePlanning
                 default:
                     throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
             }
-        }
-
-        private bool IsTopScore(float score, float bestScore)
-        {
-            return bestScore - score <= config.ScoreTieMargin;
-        }
-
-        private static float GetBestScore(
-            float mirrorScore,
-            float complementScore,
-            float simplifyScore,
-            float intensifyScore,
-            float contrastScore,
-            float fillScore)
-        {
-            return Math.Max(
-                Math.Max(Math.Max(mirrorScore, complementScore), Math.Max(simplifyScore, intensifyScore)),
-                Math.Max(contrastScore, fillScore));
         }
 
         private static bool HasLateBias(ActivityShape shape)
