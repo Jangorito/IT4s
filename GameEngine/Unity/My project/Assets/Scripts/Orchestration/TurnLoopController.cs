@@ -58,11 +58,11 @@ namespace IT4s.Orchestration
     }
 
     /// <summary>
-    /// Lightweight orchestration shell for the turn-taking system.
-    /// This controller owns the state machine and dependency wiring, but deliberately does
-    /// not implement capture, compilation, generation, or playback internals itself.
-    /// That separation keeps each subsystem replaceable and makes the loop easier to
-    /// reason about during design review, debugging, and later extension.
+    /// Orchestration owner for the turn-taking loop.
+    /// This controller remains the conductor: it owns phases, lifecycle glue, dependency
+    /// validation, observable state publication, error transitions, and playback triggering.
+    /// The synchronous AI preparation sub-flow is extracted into a focused plain C# collaborator,
+    /// while capture and playback coordination still stay here for this first refactor step.
     /// </summary>
     public class TurnLoopController : MonoBehaviour
     {
@@ -290,8 +290,7 @@ namespace IT4s.Orchestration
 
         /// <summary>
         /// Central state-machine tick.
-        /// The switch is intentionally skeletal for now: each case describes the responsibility
-        /// that will be added later, but no timing, AI, compilation, or playback work happens yet.
+        /// The controller owns phase advancement and decides when each concrete sub-flow runs.
         /// </summary>
         public void Tick()
         {
@@ -303,7 +302,7 @@ namespace IT4s.Orchestration
             switch (CurrentPhase)
             {
                 case TurnPhase.WaitingForHuman:
-                    // Waiting is event-driven in Chunk 2. Incoming hits are handled by OnHitReceived.
+                    // Waiting is event-driven in Chunk 2. Incoming hits are handled by HandleHitReceived.
                     break;
 
                 case TurnPhase.CapturingHuman:
@@ -633,7 +632,7 @@ namespace IT4s.Orchestration
 
         private void TickCompilingHumanTurn()
         {
-            if (!hasLastTurnWindow)
+            if (!HasLastTurnWindow)
             {
                 MoveToError("CompilingHumanTurn failed because no TurnWindow was available.");
                 return;
@@ -645,17 +644,17 @@ namespace IT4s.Orchestration
                 return;
             }
 
-            EmitDebugMessage($"Compiling human turn {lastTurnWindow.turnId} with {lastTurnWindow.HitCount} hits.");
+            EmitDebugMessage($"Compiling human turn {LastTurnWindow.turnId} with {LastTurnWindow.HitCount} hits.");
 
             try
             {
-                var q = currentMusicalTiming.ToQuantisationSettings();
+                QuantisationSettings quantisation = currentMusicalTiming.ToQuantisationSettings();
 
-                var compiled = patternCompiler.Compile(lastTurnWindow, q);
+                PatternTurn compiled = patternCompiler.Compile(LastTurnWindow, quantisation);
 
                 if (compiled == null)
                 {
-                    MoveToError($"PatternCompiler returned null when compiling turn {lastTurnWindow.turnId}.");
+                    MoveToError($"PatternCompiler returned null when compiling turn {LastTurnWindow.turnId}.");
                     return;
                 }
 
@@ -677,101 +676,64 @@ namespace IT4s.Orchestration
 
         private void TickGeneratingAiResponse()
         {
-            if (!hasLastCompiledPatternTurn || lastCompiledPatternTurn == null)
+            if (!HasLastCompiledPatternTurn || LastCompiledPatternTurn == null)
             {
                 MoveToError("GeneratingAiResponse failed because no compiled human PatternTurn was available.");
                 return;
             }
 
-            if (turnAnalyser == null)
+            EmitDebugMessage(
+                $"AI response generation started for turn {LastCompiledPatternTurn.turnId}. " +
+                $"Source steps={LastCompiledPatternTurn.StepCount}, sampleRate={LastCompiledPatternTurn.sampleRate}.");
+
+            AiResponsePreparationResult preparationResult;
+
+            try
             {
-                MoveToError("GeneratingAiResponse failed because TurnAnalyser reference is missing.");
+                preparationResult = CreateAiResponsePreparationFlow().Prepare(
+                    LastCompiledPatternTurn,
+                    StoreAnalysisResult,
+                    plan =>
+                    {
+                        StoreResponsePlan(plan);
+                        EmitDebugMessage(FormatResponsePlanSummary(plan));
+                    },
+                    StoreGeneratedAiPattern);
+            }
+            catch (Exception ex)
+            {
+                MoveToError(ex.Message);
                 return;
             }
 
             EmitDebugMessage(
-                $"AI response generation started for turn {lastCompiledPatternTurn.turnId}. " +
-                $"Source steps={lastCompiledPatternTurn.StepCount}, sampleRate={lastCompiledPatternTurn.sampleRate}.");
+                $"AI response generation succeeded for turn {preparationResult.GeneratedPattern.turnId}. " +
+                $"Steps={preparationResult.GeneratedPattern.StepCount}, sampleRate={preparationResult.GeneratedPattern.sampleRate}.");
 
-            string currentOperation = "TurnAnalyser.Analyze";
+            if (aiTurnPlayer == null)
+            {
+                MoveToError("GeneratingAiResponse failed because IT4ChuckTurnPlayer reference is missing.");
+                return;
+            }
+
+            if (!aiTurnPlayer.IsReady)
+            {
+                MoveToError("GeneratingAiResponse failed because IT4ChuckTurnPlayer is not ready.");
+                return;
+            }
 
             try
             {
-                TurnAnalysisResult analysis = turnAnalyser.Analyze(lastCompiledPatternTurn);
-
-                if (analysis == null)
-                {
-                    MoveToError(
-                        $"TurnAnalyser returned null when analysing turn {lastCompiledPatternTurn.turnId}.");
-                    return;
-                }
-
-                StoreAnalysisResult(analysis);
-
-                if (responsePlanner == null)
-                {
-                    MoveToError("GeneratingAiResponse failed because IResponsePlanner reference is missing.");
-                    return;
-                }
-
-                currentOperation = "IResponsePlanner.Plan";
-                ResponsePlan responsePlan = responsePlanner.Plan(analysis);
-
-                if (responsePlan == null)
-                {
-                    MoveToError(
-                        $"IResponsePlanner returned null when planning a response for turn {lastCompiledPatternTurn.turnId}.");
-                    return;
-                }
-
-                StoreResponsePlan(responsePlan);
-                EmitDebugMessage(FormatResponsePlanSummary(responsePlan));
-
-                if (featureTransformer == null)
-                {
-                    MoveToError("GeneratingAiResponse failed because FeatureTransformer reference is missing.");
-                    return;
-                }
-
-                currentOperation = "FeatureTransformer.Transform";
-                var generatedAiPattern = featureTransformer.Transform(lastCompiledPatternTurn);
-
-                if (generatedAiPattern == null)
-                {
-                    MoveToError(
-                        $"FeatureTransformer returned null when generating an AI response for turn {lastCompiledPatternTurn.turnId}.");
-                    return;
-                }
-
-                StoreGeneratedAiPattern(generatedAiPattern);
-
+                EmitDebugMessage($"Triggering AI playback for turn {LastGeneratedAiPatternTurn.turnId}.");
+                aiTurnPlayer.PlayTurn(LastGeneratedAiPatternTurn);
                 EmitDebugMessage(
-                    $"AI response generation succeeded for turn {generatedAiPattern.turnId}. " +
-                    $"Steps={generatedAiPattern.StepCount}, sampleRate={generatedAiPattern.sampleRate}.");
-
-                if (aiTurnPlayer == null)
-                {
-                    MoveToError("GeneratingAiResponse failed because IT4ChuckTurnPlayer reference is missing.");
-                    return;
-                }
-
-                if (!aiTurnPlayer.IsReady)
-                {
-                    MoveToError("GeneratingAiResponse failed because IT4ChuckTurnPlayer is not ready.");
-                    return;
-                }
-
-                currentOperation = "IT4ChuckTurnPlayer.PlayTurn";
-                EmitDebugMessage($"Triggering AI playback for turn {lastGeneratedAiPatternTurn.turnId}.");
-                aiTurnPlayer.PlayTurn(lastGeneratedAiPatternTurn);
-                EmitDebugMessage(
-                    $"AI playback triggered for turn {lastGeneratedAiPatternTurn.turnId}. Advancing to PlayingAiResponse.");
+                    $"AI playback triggered for turn {LastGeneratedAiPatternTurn.turnId}. Advancing to PlayingAiResponse.");
 
                 SetPhase(TurnPhase.PlayingAiResponse);
             }
             catch (Exception ex)
             {
-                MoveToError($"Exception during {currentOperation}: {ex.Message}");
+                MoveToError($"Exception during IT4ChuckTurnPlayer.PlayTurn: {ex.Message}");
             }
         }
 
@@ -798,7 +760,7 @@ namespace IT4s.Orchestration
 
         private void ClearGeneratedAiResponseState()
         {
-            if (lastGeneratedAiPatternTurn == null && !hasLastGeneratedAiPatternTurn)
+            if (LastGeneratedAiPatternTurn == null && !HasLastGeneratedAiPatternTurn)
             {
                 return;
             }
@@ -814,7 +776,7 @@ namespace IT4s.Orchestration
 
         private void ClearAnalysisResultState()
         {
-            if (lastAnalysisResult == null && !hasLastAnalysisResult)
+            if (LastAnalysisResult == null && !HasLastAnalysisResult)
             {
                 return;
             }
@@ -825,7 +787,7 @@ namespace IT4s.Orchestration
 
         private void ClearResponsePlanState()
         {
-            if (currentResponsePlan == null && !hasCurrentResponsePlan)
+            if (CurrentResponsePlan == null && !HasCurrentResponsePlan)
             {
                 return;
             }
@@ -866,7 +828,7 @@ namespace IT4s.Orchestration
 
             if (plan != null)
             {
-                OnResponsePlanned?.Invoke(lastAnalysisResult, plan);
+                OnResponsePlanned?.Invoke(LastAnalysisResult, plan);
             }
         }
 
@@ -941,6 +903,11 @@ namespace IT4s.Orchestration
         private static string FormatPlanValue(float value)
         {
             return value.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+
+        private AiResponsePreparationFlow CreateAiResponsePreparationFlow()
+        {
+            return new AiResponsePreparationFlow(turnAnalyser, responsePlanner, featureTransformer);
         }
 
         private void MoveToError(string reason)

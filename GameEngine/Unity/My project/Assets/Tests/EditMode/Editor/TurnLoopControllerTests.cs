@@ -199,6 +199,92 @@ namespace IT4s.Orchestration.Tests
         }
 
         [Test]
+        public void TickGeneratingAiResponse_MissingResponsePlanner_StillPublishesAnalysisBeforeError()
+        {
+            ControllerHarness harness = CreateHarness();
+            PatternTurn compiledPattern = CreateCompiledPatternTurn();
+            int analysisEventCount = 0;
+            TurnAnalysisResult analysedTurn = null;
+
+            harness.Controller.OnHumanTurnAnalysed += analysis =>
+            {
+                if (analysis == null)
+                {
+                    return;
+                }
+
+                analysisEventCount++;
+                analysedTurn = analysis;
+            };
+
+            PrepareGeneratingState(harness.Controller, compiledPattern);
+            SetPrivateField(harness.Controller, "responsePlanner", null);
+
+            LogAssert.Expect(
+                LogType.Error,
+                new Regex(@"\[TurnLoopController\] GeneratingAiResponse failed because IResponsePlanner reference is missing\."));
+
+            harness.Controller.Tick();
+
+            Assert.That(analysisEventCount, Is.EqualTo(1));
+            Assert.That(analysedTurn, Is.Not.Null);
+            Assert.That(harness.Controller.HasLastAnalysisResult, Is.True);
+            Assert.That(harness.Controller.HasCurrentResponsePlan, Is.False);
+            Assert.That(harness.Controller.HasLastGeneratedAiPatternTurn, Is.False);
+            Assert.That(harness.Controller.CurrentPhase, Is.EqualTo(TurnPhase.Error));
+        }
+
+        [Test]
+        public void TickGeneratingAiResponse_MissingFeatureTransformer_StillPublishesAnalysisAndPlanBeforeError()
+        {
+            ResponsePlan plannedResponse = DefaultResponsePlan();
+            ControllerHarness harness = CreateHarness(new FixedResponsePlanner(plannedResponse));
+            PatternTurn compiledPattern = CreateCompiledPatternTurn();
+            var eventOrder = new List<string>();
+            TurnAnalysisResult analysedTurn = null;
+            ResponsePlan plannedTurn = null;
+
+            harness.Controller.OnHumanTurnAnalysed += analysis =>
+            {
+                if (analysis == null)
+                {
+                    return;
+                }
+
+                eventOrder.Add("analysed");
+                analysedTurn = analysis;
+            };
+
+            harness.Controller.OnResponsePlanned += (analysis, plan) =>
+            {
+                if (plan == null)
+                {
+                    return;
+                }
+
+                eventOrder.Add("planned");
+                plannedTurn = plan;
+                Assert.That(analysis, Is.SameAs(analysedTurn));
+            };
+
+            PrepareGeneratingState(harness.Controller, compiledPattern);
+            SetPrivateField(harness.Controller, "featureTransformer", null);
+
+            LogAssert.Expect(
+                LogType.Error,
+                new Regex(@"\[TurnLoopController\] GeneratingAiResponse failed because FeatureTransformer reference is missing\."));
+
+            harness.Controller.Tick();
+
+            CollectionAssert.AreEqual(new[] { "analysed", "planned" }, eventOrder);
+            Assert.That(plannedTurn, Is.SameAs(plannedResponse));
+            Assert.That(harness.Controller.HasLastAnalysisResult, Is.True);
+            Assert.That(harness.Controller.HasCurrentResponsePlan, Is.True);
+            Assert.That(harness.Controller.HasLastGeneratedAiPatternTurn, Is.False);
+            Assert.That(harness.Controller.CurrentPhase, Is.EqualTo(TurnPhase.Error));
+        }
+
+        [Test]
         public void ClearGeneratedAiResponseState_ClearsOnlyGeneratedPatternState()
         {
             ControllerHarness harness = CreateHarness();
@@ -443,6 +529,13 @@ namespace IT4s.Orchestration.Tests
             FieldInfo field = target.GetType().GetField(fieldName, InstanceFlags);
             Assert.That(field, Is.Not.Null, $"Expected private field '{fieldName}' to exist.");
             return (T)field.GetValue(target);
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, InstanceFlags);
+            Assert.That(field, Is.Not.Null, $"Expected private field '{fieldName}' to exist.");
+            field.SetValue(target, value);
         }
 
         private sealed class ControllerHarness
