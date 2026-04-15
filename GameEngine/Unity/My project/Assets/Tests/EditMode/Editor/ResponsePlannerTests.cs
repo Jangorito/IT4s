@@ -10,67 +10,29 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
     public sealed class ResponsePlannerTests
     {
         [Test]
-        public void Plan_BalancedAnchoredStrongEnding_ReturnsMirror()
+        public void Plan_SparseLowEnergyWithoutWeakEnding_TendsTowardIntensify()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
-                    density: 0.55f,
-                    energy: 0.55f,
-                    anchorCount: 2,
-                    strongestAnchorScore: 0.8f,
-                    endDensity: 0.75f,
-                    endEnergy: 0.8f,
-                    endAccent: 120));
-
-            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Mirror));
-            Assert.That(plan.MirrorEnding, Is.True);
-        }
-
-        [Test]
-        public void Plan_BalancedAnchoredGappedInput_PrefersComplementOverMirror()
-        {
-            ResponsePlan plan = Planner().Plan(
-                Analysis(
-                    density: 0.55f,
-                    energy: 0.55f,
-                    anchorCount: 2,
-                    strongestAnchorScore: 0.8f));
-
-            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Complement));
-            Assert.That(plan.PreserveAnchors, Is.True);
-        }
-
-        [Test]
-        public void Plan_BusyHighEnergy_ReturnsSimplify()
-        {
-            ResponsePlan plan = Planner().Plan(Analysis(density: 0.85f, energy: 0.8f));
-
-            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Simplify));
-        }
-
-        [Test]
-        public void Plan_SparseLowEnergyWithoutWeakEnding_ReturnsIntensify()
-        {
-            ResponsePlan plan = Planner().Plan(
-                Analysis(
-                    density: 0.2f,
-                    energy: 0.2f,
+                    density: 0.20f,
+                    energy: 0.20f,
                     endDensity: 0.35f,
-                    endEnergy: 0.4f,
+                    endEnergy: 0.40f,
                     endAccent: 60));
 
             Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Intensify));
+            Assert.That(plan.MirrorEnding, Is.False);
         }
 
         [Test]
-        public void Plan_SparseLowEnergyOpenEnding_PrefersFillOverIntensify()
+        public void Plan_SparseLowEnergyOpenEnding_PrefersFillWhenClosureIsPrimaryIssue()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
-                    density: 0.2f,
-                    energy: 0.2f,
-                    endDensity: 0.1f,
-                    endEnergy: 0.1f,
+                    density: 0.20f,
+                    energy: 0.20f,
+                    endDensity: 0.10f,
+                    endEnergy: 0.10f,
                     endAccent: 0));
 
             Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Fill));
@@ -78,46 +40,177 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
         }
 
         [Test]
-        public void Plan_DirectionalHighEnergyWithoutMeaningfulAnchors_ReturnsContrast()
-        {
-            ResponsePlan plan = Planner().Plan(
-                Analysis(
-                    density: 0.55f,
-                    energy: 0.8f,
-                    densityShape: ActivityShape.BackLoaded,
-                    energyShape: ActivityShape.BackLoaded));
-
-            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Contrast));
-        }
-
-        [Test]
-        public void Plan_ComplementWithMeaningfulAnchors_DoesNotDropAnchorPreservation()
+        public void Plan_BalancedMeaningfulAnchorsStrongEnding_TendsTowardMirror()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
                     density: 0.55f,
                     energy: 0.55f,
-                    anchorCount: 1,
-                    strongestAnchorScore: 0.8f));
+                    anchorCount: 2,
+                    strongestAnchorScore: 0.80f,
+                    endDensity: 0.75f,
+                    endEnergy: 0.80f,
+                    endAccent: 120));
 
-            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Complement));
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Mirror));
             Assert.That(plan.PreserveAnchors, Is.True);
+            Assert.That(plan.MirrorEnding, Is.True);
         }
 
         [Test]
-        public void Plan_ClampsDensityAndTurnLengthStepsToConfiguredBounds()
+        public void Plan_BalancedMeaningfulAnchorsWithConversationalSpace_CanPreferComplementOverMirror()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
+                    density: 0.45f,
+                    energy: 0.55f,
+                    anchorCount: 2,
+                    strongestAnchorScore: 0.80f));
+
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Complement));
+            Assert.That(plan.PreserveAnchors, Is.True);
+            Assert.That(plan.MirrorEnding, Is.False);
+        }
+
+        [Test]
+        public void Plan_BusyHighEnergy_TendsTowardSimplify()
+        {
+            ResponsePlan plan = Planner().Plan(
+                Analysis(
+                    density: 0.85f,
+                    energy: 0.80f));
+
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Simplify));
+        }
+
+        [Test]
+        public void Plan_WithoutPredictableProfile_ContrastDoesNotBecomeDefaultFallback()
+        {
+            ResponsePlan plan = Planner().Plan(
+                Analysis(
+                    density: 0.55f,
+                    energy: 0.55f));
+
+            Assert.That(plan.ResponseType, Is.Not.EqualTo(ResponseType.Contrast));
+        }
+
+        [Test]
+        public void Plan_TargetDensity_ClampsToConfiguredBoundsAndTurnLength()
+        {
+            var maxPlanner = Planner(
+                new ResponsePlannerConfig
+                {
+                    MaxTargetDensity = 0.80f
+                });
+
+            ResponsePlan maxPlan = maxPlanner.Plan(
+                Analysis(
                     density: 0.69f,
-                    energy: 0.2f,
+                    energy: 0.20f,
                     stepCount: 0,
-                    endDensity: 0.1f,
-                    endEnergy: 0.1f,
+                    endDensity: 0.10f,
+                    endEnergy: 0.10f,
                     endAccent: 0));
 
-            Assert.That(plan.TargetDensity, Is.EqualTo(0.8f).Within(0.0001f));
-            Assert.That(plan.TurnLengthSteps, Is.EqualTo(1));
+            var minPlanner = Planner(
+                new ResponsePlannerConfig
+                {
+                    MinTargetDensity = 0.70f,
+                    MaxTargetDensity = 1.00f,
+                    MaxTargetDensityDelta = 1.00f
+                });
+
+            ResponsePlan minPlan = minPlanner.Plan(
+                Analysis(
+                    density: 0.80f,
+                    energy: 0.90f));
+
+            Assert.That(maxPlan.TargetDensity, Is.EqualTo(0.80f).Within(0.0001f));
+            Assert.That(maxPlan.TurnLengthSteps, Is.EqualTo(1));
+            Assert.That(minPlan.TargetDensity, Is.EqualTo(0.70f).Within(0.0001f));
+        }
+
+        [Test]
+        public void Plan_ComplementarityBias_ClampsToUnitInterval()
+        {
+            var highClampPlanner = Planner(
+                new ResponsePlannerConfig
+                {
+                    ComplementarityAdjustment = 0.40f
+                });
+
+            ResponsePlan highClampPlan = highClampPlanner.Plan(
+                Analysis(
+                    density: 0.20f,
+                    energy: 0.20f,
+                    endDensity: 0.10f,
+                    endEnergy: 0.10f,
+                    endAccent: 0));
+
+            var lowClampPlanner = Planner(
+                new ResponsePlannerConfig
+                {
+                    ComplementarityAdjustment = 0.40f
+                });
+
+            ResponsePlan lowClampPlan = lowClampPlanner.Plan(
+                Analysis(
+                    density: 0.55f,
+                    energy: 0.55f,
+                    anchorCount: 2,
+                    strongestAnchorScore: 0.80f,
+                    endDensity: 0.75f,
+                    endEnergy: 0.80f,
+                    endAccent: 120));
+
+            Assert.That(highClampPlan.ComplementarityBias, Is.EqualTo(1.00f).Within(0.0001f));
+            Assert.That(lowClampPlan.ComplementarityBias, Is.EqualTo(0.00f).Within(0.0001f));
+        }
+
+        [Test]
+        public void Plan_PreserveAnchors_OnlyBecomesTrueWhenAnchorsAreMeaningful()
+        {
+            ResponsePlan plan = Planner().Plan(
+                Analysis(
+                    density: 0.55f,
+                    energy: 0.55f,
+                    anchorCount: 2,
+                    strongestAnchorScore: 0.40f,
+                    endDensity: 0.75f,
+                    endEnergy: 0.80f,
+                    endAccent: 120));
+
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Mirror));
+            Assert.That(plan.PreserveAnchors, Is.False);
+        }
+
+        [Test]
+        public void Plan_MirrorEnding_OnlyTrueForStrongMirrorResponses()
+        {
+            ResponsePlan mirrorPlan = Planner().Plan(
+                Analysis(
+                    density: 0.55f,
+                    energy: 0.55f,
+                    anchorCount: 2,
+                    strongestAnchorScore: 0.80f,
+                    endDensity: 0.75f,
+                    endEnergy: 0.80f,
+                    endAccent: 120));
+
+            ResponsePlan nonMirrorPlan = Planner().Plan(
+                Analysis(
+                    density: 0.85f,
+                    energy: 0.80f,
+                    anchorCount: 2,
+                    strongestAnchorScore: 0.80f,
+                    endDensity: 0.75f,
+                    endEnergy: 0.80f,
+                    endAccent: 120));
+
+            Assert.That(mirrorPlan.ResponseType, Is.EqualTo(ResponseType.Mirror));
+            Assert.That(mirrorPlan.MirrorEnding, Is.True);
+            Assert.That(nonMirrorPlan.ResponseType, Is.EqualTo(ResponseType.Simplify));
+            Assert.That(nonMirrorPlan.MirrorEnding, Is.False);
         }
 
         [Test]
@@ -127,7 +220,7 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
                 density: 0.62f,
                 energy: 0.58f,
                 anchorCount: 1,
-                strongestAnchorScore: 0.7f);
+                strongestAnchorScore: 0.70f);
 
             ResponsePlan firstPlan = Planner().Plan(analysis);
             ResponsePlan secondPlan = Planner().Plan(analysis);
@@ -136,24 +229,41 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
         }
 
         [Test]
-        public void Plan_OutputsOnlyCorePlannerFields()
+        public void Plan_PopulatesLastSnapshotWithScoresAndFinalPlan()
         {
-            ResponsePlan plan = Planner().Plan(
+            ResponsePlanner planner = Planner();
+            ResponsePlan plan = planner.Plan(
                 Analysis(
-                    density: 0.55f,
+                    density: 0.45f,
                     energy: 0.55f,
-                    anchorCount: 1,
-                    strongestAnchorScore: 0.8f));
+                    anchorCount: 2,
+                    strongestAnchorScore: 0.80f));
 
-            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Complement));
-            Assert.That(plan.TargetDensity, Is.InRange(0f, 1f));
-            Assert.That(plan.ComplementarityBias, Is.InRange(0f, 1f));
-            Assert.That(plan.TurnLengthSteps, Is.GreaterThanOrEqualTo(1));
+            ResponsePlannerDebugSnapshot snapshot = planner.LastSnapshot;
+
+            Assert.That(snapshot, Is.Not.Null);
+            Assert.That(snapshot.SelectedResponseType, Is.EqualTo(plan.ResponseType));
+            Assert.That(snapshot.FinalPlan, Is.Not.Null);
+            Assert.That(snapshot.FinalPlan.ResponseType, Is.EqualTo(plan.ResponseType));
+            Assert.That(snapshot.PerResponseTypeScores, Has.Count.EqualTo(6));
+            Assert.That(snapshot.SourceDescriptorSummary, Is.Not.Null);
+            Assert.That(snapshot.SourceDescriptorSummary.Summary, Does.Contain("ConversationalSpace"));
+            Assert.That(snapshot.SourceNumericSummary, Is.Not.Null);
+            Assert.That(snapshot.SourceNumericSummary.AnchorCount, Is.EqualTo(2));
+
+            Assert.That(HasScoreFor(snapshot.PerResponseTypeScores, ResponseType.Mirror), Is.True);
+            Assert.That(HasScoreFor(snapshot.PerResponseTypeScores, ResponseType.Complement), Is.True);
+            Assert.That(HasScoreFor(snapshot.PerResponseTypeScores, ResponseType.Simplify), Is.True);
+            Assert.That(HasScoreFor(snapshot.PerResponseTypeScores, ResponseType.Intensify), Is.True);
+            Assert.That(HasScoreFor(snapshot.PerResponseTypeScores, ResponseType.Contrast), Is.True);
+            Assert.That(HasScoreFor(snapshot.PerResponseTypeScores, ResponseType.Fill), Is.True);
         }
 
-        private static ResponsePlanner Planner()
+        private static ResponsePlanner Planner(ResponsePlannerConfig config = null)
         {
-            return new ResponsePlanner();
+            return config == null
+                ? new ResponsePlanner()
+                : new ResponsePlanner(config);
         }
 
         private static TurnAnalysisResult Analysis(
@@ -178,7 +288,8 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
 
         private static DensityFeatures Density(float density, int stepCount)
         {
-            int activeSteps = (int)Math.Round(density * Math.Max(stepCount, 0), MidpointRounding.AwayFromZero);
+            int safeStepCount = Math.Max(stepCount, 0);
+            int activeSteps = (int)Math.Round(density * safeStepCount, MidpointRounding.AwayFromZero);
 
             return new DensityFeatures(
                 stepCount,
@@ -197,7 +308,7 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
                 (int)Math.Round(meanVelocity, MidpointRounding.AwayFromZero),
                 0f,
                 Segments(meanVelocity),
-                energy > 0.7f,
+                energy > 0.70f,
                 energy < 0.35f,
                 true,
                 false,
@@ -243,6 +354,17 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
         private static IReadOnlyList<float> Segments(float value)
         {
             return new[] { value, value, value, value };
+        }
+
+        private static bool HasScoreFor(IReadOnlyList<ResponseTypeScore> scores, ResponseType responseType)
+        {
+            for (int i = 0; i < scores.Count; i++)
+            {
+                if (scores[i].ResponseType == responseType)
+                    return true;
+            }
+
+            return false;
         }
 
         private static void AssertPlansEqual(ResponsePlan expected, ResponsePlan actual)
