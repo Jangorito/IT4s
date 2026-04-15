@@ -11,12 +11,14 @@ namespace IT4s.Rhythm.ResponsePlanning
             bool endingIsOpen,
             bool activityIsBackLoaded,
             bool activityIsFrontLoaded,
+            bool activityIsBalanced,
             bool isSparse,
             bool isBusy,
             bool isLowEnergy,
             bool isHighEnergy,
-            bool hasMeaningfulGaps,
+            bool hasConversationalSpace,
             bool isCongested,
+            bool isPredictableProfile,
             int turnLengthSteps)
         {
             SourceDensity = sourceDensity;
@@ -27,12 +29,14 @@ namespace IT4s.Rhythm.ResponsePlanning
             EndingIsOpen = endingIsOpen;
             ActivityIsBackLoaded = activityIsBackLoaded;
             ActivityIsFrontLoaded = activityIsFrontLoaded;
+            ActivityIsBalanced = activityIsBalanced;
             IsSparse = isSparse;
             IsBusy = isBusy;
             IsLowEnergy = isLowEnergy;
             IsHighEnergy = isHighEnergy;
-            HasMeaningfulGaps = hasMeaningfulGaps;
+            HasConversationalSpace = hasConversationalSpace;
             IsCongested = isCongested;
+            IsPredictableProfile = isPredictableProfile;
             TurnLengthSteps = turnLengthSteps;
         }
 
@@ -44,14 +48,17 @@ namespace IT4s.Rhythm.ResponsePlanning
         public bool EndingIsOpen { get; }
         public bool ActivityIsBackLoaded { get; }
         public bool ActivityIsFrontLoaded { get; }
+        public bool ActivityIsBalanced { get; }
         public bool IsSparse { get; }
         public bool IsBalancedDensity => !IsSparse && !IsBusy;
         public bool IsBusy { get; }
         public bool IsLowEnergy { get; }
         public bool IsMediumEnergy => !IsLowEnergy && !IsHighEnergy;
         public bool IsHighEnergy { get; }
-        public bool HasMeaningfulGaps { get; }
+        public bool HasConversationalSpace { get; }
+        public bool HasMeaningfulGaps => HasConversationalSpace;
         public bool IsCongested { get; }
+        public bool IsPredictableProfile { get; }
         public int TurnLengthSteps { get; }
     }
 }

@@ -24,12 +24,12 @@ namespace IT4s.Rhythm.ResponsePlanning
             if (analysis == null)
                 throw new ArgumentNullException(nameof(analysis));
 
-            PlanningContext context = BuildContext(analysis);
+            PlanningContext context = BuildContext(analysis, config);
             ResponseType responseType = ChooseResponseType(context);
             return DerivePlan(context, responseType);
         }
 
-        private PlanningContext BuildContext(TurnAnalysisResult analysis)
+        private static PlanningContext BuildContext(TurnAnalysisResult analysis, ResponsePlannerConfig config)
         {
             DensityFeatures density = GetDensity(analysis);
             EnergyFeatures energy = GetEnergy(analysis);
@@ -38,30 +38,33 @@ namespace IT4s.Rhythm.ResponsePlanning
             SegmentActivityProfileFeatures profile = GetSegmentActivityProfile(analysis);
 
             float sourceDensity = Clamp01(density.StepDensity);
-            float sourceEnergy = Clamp01(energy.MeanVelocity / MaxVelocity);
-            float endEnergy = Clamp01(endActivity.EndEnergy / MaxVelocity);
-            float endAccent = Clamp01(endActivity.EndAccent / MaxVelocity);
+            float sourceEnergy = NormalizeVelocity(energy.MeanVelocity);
+            float endDensity = Clamp01(endActivity.EndDensity);
+            float endEnergy = NormalizeVelocity(endActivity.EndEnergy);
+            float endAccent = NormalizeVelocity(endActivity.EndAccent);
             bool hasMeaningfulAnchors =
                 anchors.AnchorCount >= config.MeaningfulAnchorCountThreshold &&
                 anchors.StrongestAnchorScore >= config.MeaningfulAnchorScoreThreshold;
             bool hasStrongEnding =
                 anchors.HasClosingAnchor ||
-                (endActivity.EndDensity >= config.StrongEndingDensityThreshold &&
+                (endDensity >= config.StrongEndingDensityThreshold &&
                 (endEnergy >= config.StrongEndingEnergyThreshold ||
                 endAccent >= config.StrongEndingAccentThreshold));
             bool endingIsOpen =
                 !anchors.HasClosingAnchor &&
-                endActivity.EndDensity <= config.OpenEndingDensityThreshold &&
+                endDensity <= config.OpenEndingDensityThreshold &&
                 endEnergy <= config.OpenEndingEnergyThreshold &&
                 endAccent <= config.OpenEndingAccentThreshold;
             bool activityIsBackLoaded = HasLateBias(profile.DensityShape) || HasLateBias(profile.EnergyShape);
             bool activityIsFrontLoaded = HasEarlyBias(profile.DensityShape) || HasEarlyBias(profile.EnergyShape);
-            bool isSparse = sourceDensity < config.SparseDensityThreshold;
-            bool isBusy = sourceDensity > config.BusyDensityThreshold;
-            bool isLowEnergy = energy.IsLowEnergy || sourceEnergy < config.LowEnergyThreshold;
-            bool isHighEnergy = energy.IsHighEnergy || sourceEnergy > config.HighEnergyThreshold;
-            bool hasMeaningfulGaps = sourceDensity <= config.GapDensityThreshold;
+            bool activityIsBalanced = IsBalancedProfile(profile);
+            bool isSparse = sourceDensity <= config.SparseDensityThreshold;
+            bool isBusy = sourceDensity >= config.BusyDensityThreshold;
+            bool isLowEnergy = energy.IsLowEnergy || sourceEnergy <= config.LowEnergyThreshold;
+            bool isHighEnergy = energy.IsHighEnergy || sourceEnergy >= config.HighEnergyThreshold;
+            bool hasConversationalSpace = sourceDensity <= config.ConversationalSpaceDensityThreshold;
             bool isCongested = sourceDensity >= config.CongestedDensityThreshold || (isBusy && isHighEnergy);
+            bool isPredictableProfile = IsPredictableShape(profile.DensityShape) || IsPredictableShape(profile.EnergyShape);
 
             return new PlanningContext(
                 sourceDensity,
@@ -72,12 +75,14 @@ namespace IT4s.Rhythm.ResponsePlanning
                 endingIsOpen,
                 activityIsBackLoaded,
                 activityIsFrontLoaded,
+                activityIsBalanced,
                 isSparse,
                 isBusy,
                 isLowEnergy,
                 isHighEnergy,
-                hasMeaningfulGaps,
+                hasConversationalSpace,
                 isCongested,
+                isPredictableProfile,
                 GetTurnLengthSteps(analysis));
         }
 
@@ -349,6 +354,38 @@ namespace IT4s.Rhythm.ResponsePlanning
             return shape == ActivityShape.Decreasing || shape == ActivityShape.FrontLoaded;
         }
 
+        private static bool IsBalancedProfile(SegmentActivityProfileFeatures profile)
+        {
+            return IsBalancedShape(profile.DensityShape) && IsBalancedShape(profile.EnergyShape);
+        }
+
+        private static bool IsBalancedShape(ActivityShape shape)
+        {
+            switch (shape)
+            {
+                case ActivityShape.Flat:
+                case ActivityShape.MidPeak:
+                case ActivityShape.MidDip:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsPredictableShape(ActivityShape shape)
+        {
+            switch (shape)
+            {
+                case ActivityShape.Increasing:
+                case ActivityShape.Decreasing:
+                case ActivityShape.FrontLoaded:
+                case ActivityShape.BackLoaded:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static int GetTurnLengthSteps(TurnAnalysisResult analysis)
         {
             return Math.Max(GetDensity(analysis).StepCount, GetAnchors(analysis).StepCount);
@@ -384,6 +421,16 @@ namespace IT4s.Rhythm.ResponsePlanning
             if (value < 0f) return 0f;
             if (value > 1f) return 1f;
             return value;
+        }
+
+        private static float NormalizeVelocity(float velocity)
+        {
+            return Clamp01(velocity / MaxVelocity);
+        }
+
+        private static float NormalizeVelocity(int velocity)
+        {
+            return Clamp01(velocity / MaxVelocity);
         }
 
         private static float Clamp(float value, float minimum, float maximum)

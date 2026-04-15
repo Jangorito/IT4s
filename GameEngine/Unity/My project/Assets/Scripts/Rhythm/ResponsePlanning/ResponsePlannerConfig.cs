@@ -4,7 +4,7 @@ namespace IT4s.Rhythm.ResponsePlanning
     {
         public float SparseDensityThreshold { get; set; } = 0.35f;
         public float BusyDensityThreshold { get; set; } = 0.70f;
-        public float GapDensityThreshold { get; set; } = 0.65f;
+        public float ConversationalSpaceDensityThreshold { get; set; } = 0.60f;
         public float CongestedDensityThreshold { get; set; } = 0.75f;
 
         public float LowEnergyThreshold { get; set; } = 0.35f;
