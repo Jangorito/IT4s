@@ -61,8 +61,8 @@ namespace IT4s.Orchestration
     /// Orchestration owner for the turn-taking loop.
     /// This controller remains the conductor: it owns phases, lifecycle glue, dependency
     /// validation, observable state publication, error transitions, and playback triggering.
-    /// The synchronous AI preparation sub-flow is extracted into a focused plain C# collaborator,
-    /// while capture and playback coordination still stay here for this first refactor step.
+    /// Concrete human capture coordination and synchronous AI preparation are extracted into
+    /// focused plain C# collaborators, while playback coordination still stays here for now.
     /// </summary>
     public class TurnLoopController : MonoBehaviour
     {
@@ -537,97 +537,75 @@ namespace IT4s.Orchestration
         {
             ResolveReceiverReference();
 
-            if (turnCaptureController == null)
+            HumanTurnCaptureFlow.StartStatus startStatus =
+                CreateHumanTurnCaptureFlow().TryStartCapture(
+                    triggerHit,
+                    currentMusicalTiming,
+                    out long turnDurationSamples,
+                    out long scheduledEndSamples,
+                    out string errorReason);
+
+            switch (startStatus)
             {
-                MoveToError("Cannot start human turn because TurnCaptureController is missing.");
-                return;
+                case HumanTurnCaptureFlow.StartStatus.Error:
+                    MoveToError(errorReason);
+                    return;
+
+                case HumanTurnCaptureFlow.StartStatus.Ignored:
+                    Debug.LogWarning($"[TurnLoopController] Failed to begin capture at {triggerHit.tSamples} samples.");
+                    return;
+
+                case HumanTurnCaptureFlow.StartStatus.Started:
+                    lastTriggerHit = triggerHit;
+                    hasLastTriggerHit = true;
+                    startSamples = triggerHit.tSamples;
+                    endSamples = scheduledEndSamples;
+                    captureClockWarningIssued = false;
+                    ClearAnalysisAndPlanningRuntimeState();
+
+                    EmitDebugMessage($"Human turn started at sample {startSamples}.");
+                    EmitDebugMessage(
+                        $"Human turn scheduled to end at sample {endSamples} " +
+                        $"(duration={turnDurationSamples} samples, {currentMusicalTiming.barsPerTurn} bars at {currentMusicalTiming.bpm} bpm).");
+                    SetPhase(TurnPhase.CapturingHuman);
+                    return;
             }
-
-            if (hitReceiver == null)
-            {
-                MoveToError("Cannot start human turn because OscHitReceiver is missing.");
-                return;
-            }
-
-            long turnDurationSamples = currentMusicalTiming.GetTurnDurationSamples();
-
-            if (triggerHit.tSamples > long.MaxValue - turnDurationSamples)
-            {
-                MoveToError(
-                    $"Cannot schedule human turn end because start={triggerHit.tSamples} would overflow with duration={turnDurationSamples}.");
-                return;
-            }
-
-            if (!turnCaptureController.TryBeginCapture(triggerHit.tSamples))
-            {
-                Debug.LogWarning($"[TurnLoopController] Failed to begin capture at {triggerHit.tSamples} samples.");
-                return;
-            }
-
-            lastTriggerHit = triggerHit;
-            hasLastTriggerHit = true;
-            startSamples = triggerHit.tSamples;
-            endSamples = startSamples + turnDurationSamples;
-            captureClockWarningIssued = false;
-            ClearAnalysisAndPlanningRuntimeState();
-
-            EmitDebugMessage($"Human turn started at sample {startSamples}.");
-            EmitDebugMessage(
-                $"Human turn scheduled to end at sample {endSamples} " +
-                $"(duration={turnDurationSamples} samples, {currentMusicalTiming.barsPerTurn} bars at {currentMusicalTiming.bpm} bpm).");
-            SetPhase(TurnPhase.CapturingHuman);
         }
 
         private void TickCapturingHuman()
         {
-            if (turnCaptureController == null)
+            HumanTurnCaptureFlow.TickStatus tickStatus =
+                CreateHumanTurnCaptureFlow().TickCapture(startSamples, endSamples, out TurnWindow turnWindow, out string errorReason);
+
+            switch (tickStatus)
             {
-                MoveToError("Capture phase failed because TurnCaptureController is missing.");
-                return;
+                case HumanTurnCaptureFlow.TickStatus.Error:
+                    MoveToError(errorReason);
+                    return;
+
+                case HumanTurnCaptureFlow.TickStatus.WaitingForClock:
+                    if (!captureClockWarningIssued)
+                    {
+                        Debug.LogWarning("[TurnLoopController] Capture phase is waiting for a valid sample clock from OscHitReceiver.");
+                        captureClockWarningIssued = true;
+                    }
+
+                    return;
+
+                case HumanTurnCaptureFlow.TickStatus.WaitingForEnd:
+                    captureClockWarningIssued = false;
+                    return;
+
+                case HumanTurnCaptureFlow.TickStatus.Completed:
+                    captureClockWarningIssued = false;
+                    StoreCapturedTurnWindow(turnWindow);
+
+                    EmitDebugMessage(
+                        $"Human turn ended at sample {turnWindow.endSamples}. Window={turnWindow.turnId}, hits={turnWindow.HitCount}.");
+
+                    SetPhase(TurnPhase.CompilingHumanTurn);
+                    return;
             }
-
-            if (!turnCaptureController.IsCapturing)
-            {
-                MoveToError("Capture phase lost sync because TurnCaptureController is no longer capturing.");
-                return;
-            }
-
-            if (startSamples < 0 || endSamples < startSamples)
-            {
-                MoveToError($"Capture phase has invalid timing bounds start={startSamples}, end={endSamples}.");
-                return;
-            }
-
-            if (!TryGetCurrentSampleTime(out long currentSamples))
-            {
-                if (!captureClockWarningIssued)
-                {
-                    Debug.LogWarning("[TurnLoopController] Capture phase is waiting for a valid sample clock from OscHitReceiver.");
-                    captureClockWarningIssued = true;
-                }
-
-                return;
-            }
-
-            captureClockWarningIssued = false;
-
-            if (currentSamples < endSamples)
-            {
-                return;
-            }
-
-            if (!turnCaptureController.TryEndCapture(endSamples, out var turnWindow))
-            {
-                MoveToError($"Capture phase failed to end cleanly at sample {endSamples}.");
-                return;
-            }
-
-            StoreCapturedTurnWindow(turnWindow);
-
-            EmitDebugMessage(
-                $"Human turn ended at sample {turnWindow.endSamples}. Window={turnWindow.turnId}, hits={turnWindow.HitCount}.");
-
-            SetPhase(TurnPhase.CompilingHumanTurn);
         }
 
         private void TickCompilingHumanTurn()
@@ -735,19 +713,6 @@ namespace IT4s.Orchestration
             {
                 MoveToError($"Exception during IT4ChuckTurnPlayer.PlayTurn: {ex.Message}");
             }
-        }
-
-        private bool TryGetCurrentSampleTime(out long currentSamples)
-        {
-            ResolveReceiverReference();
-
-            if (hitReceiver == null)
-            {
-                currentSamples = 0;
-                return false;
-            }
-
-            return hitReceiver.TryGetCurrentSampleTime(out currentSamples);
         }
 
         private void ClearCaptureRuntimeState()
@@ -908,6 +873,11 @@ namespace IT4s.Orchestration
         private AiResponsePreparationFlow CreateAiResponsePreparationFlow()
         {
             return new AiResponsePreparationFlow(turnAnalyser, responsePlanner, featureTransformer);
+        }
+
+        private HumanTurnCaptureFlow CreateHumanTurnCaptureFlow()
+        {
+            return new HumanTurnCaptureFlow(turnCaptureController, hitReceiver);
         }
 
         private void MoveToError(string reason)
