@@ -833,14 +833,11 @@ namespace IT4s.Orchestration
 
             return
                 "Response plan: " +
-                $"ResponseType={plan.Type}, " +
+                $"ResponseType={plan.ResponseType}, " +
                 $"TargetDensity={FormatPlanValue(plan.TargetDensity)}, " +
-                $"TargetEnergy={FormatPlanValue(plan.TargetEnergy)}, " +
+                $"ComplementarityBias={FormatPlanValue(plan.ComplementarityBias)}, " +
                 $"PreserveAnchors={plan.PreserveAnchors}, " +
                 $"MirrorEnding={plan.MirrorEnding}, " +
-                $"VariationAmount={FormatPlanValue(plan.VariationAmount)}, " +
-                $"SyncopationBias={FormatPlanValue(plan.SyncopationBias)}, " +
-                $"ComplementarityBias={FormatPlanValue(plan.ComplementarityBias)}, " +
                 $"TurnLengthSteps={plan.TurnLengthSteps}.";
         }
 

@@ -53,12 +53,9 @@ namespace IT4s.Orchestration.Tests
             ResponsePlan plannedResponse = new ResponsePlan(
                 ResponseType.Contrast,
                 0.7f,
-                0.25f,
+                0.4f,
                 false,
                 true,
-                0.6f,
-                0.8f,
-                0.4f,
                 16);
             ControllerHarness harness = CreateHarness(new FixedResponsePlanner(plannedResponse));
             PatternTurn compiledPattern = CreateCompiledPatternTurn();
@@ -144,12 +141,9 @@ namespace IT4s.Orchestration.Tests
             ResponsePlan plannedResponse = new ResponsePlan(
                 ResponseType.Fill,
                 0.625f,
-                0.75f,
+                0.125f,
                 true,
                 false,
-                0.375f,
-                0.5f,
-                0.125f,
                 12);
             ControllerHarness harness = CreateHarness(new FixedResponsePlanner(plannedResponse));
             PatternTurn compiledPattern = CreateCompiledPatternTurn();
@@ -167,7 +161,7 @@ namespace IT4s.Orchestration.Tests
             Assert.That(
                 debugMessages,
                 Does.Contain(
-                    "Response plan: ResponseType=Fill, TargetDensity=0.625, TargetEnergy=0.75, PreserveAnchors=True, MirrorEnding=False, VariationAmount=0.375, SyncopationBias=0.5, ComplementarityBias=0.125, TurnLengthSteps=12."));
+                    "Response plan: ResponseType=Fill, TargetDensity=0.625, ComplementarityBias=0.125, PreserveAnchors=True, MirrorEnding=False, TurnLengthSteps=12."));
         }
 
         [Test]
@@ -296,11 +290,8 @@ namespace IT4s.Orchestration.Tests
                 new ResponsePlan(
                     ResponseType.Mirror,
                     0.5f,
-                    0.5f,
                     true,
                     true,
-                    0.2f,
-                    0.2f,
                     0.2f,
                     16));
             InvokePrivateMethod(harness.Controller, "StoreGeneratedAiPattern", CreateCompiledPatternTurn());
@@ -336,11 +327,8 @@ namespace IT4s.Orchestration.Tests
                 new ResponsePlan(
                     ResponseType.Mirror,
                     0.5f,
-                    0.5f,
                     true,
                     true,
-                    0.2f,
-                    0.2f,
                     0.2f,
                     16));
 
@@ -374,11 +362,8 @@ namespace IT4s.Orchestration.Tests
                 new ResponsePlan(
                     ResponseType.Mirror,
                     0.5f,
-                    0.5f,
                     true,
                     true,
-                    0.2f,
-                    0.2f,
                     0.2f,
                     16));
             InvokePrivateMethod(harness.Controller, "StoreGeneratedAiPattern", CreateCompiledPatternTurn());
@@ -495,12 +480,9 @@ namespace IT4s.Orchestration.Tests
             return new ResponsePlan(
                 ResponseType.Mirror,
                 0.5f,
-                0.5f,
+                0.2f,
                 true,
                 true,
-                0.2f,
-                0.2f,
-                0.2f,
                 16);
         }
 

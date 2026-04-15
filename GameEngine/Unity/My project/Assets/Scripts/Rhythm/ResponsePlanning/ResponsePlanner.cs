@@ -7,37 +7,16 @@ namespace IT4s.Rhythm.ResponsePlanning
     public sealed class ResponsePlanner : IResponsePlanner
     {
         private const float MaxVelocity = 127f;
-        private const float HighSupportThreshold = 0.6f;
-        private const float LowSupportThreshold = 0.4f;
-        private const float MidLevelThreshold = 0.5f;
-        private const float LowDensityThreshold = 0.35f;
-        private const float HighDensityThreshold = 0.7f;
-        private const float StrongAnchorThreshold = 0.7f;
-        private const float StrongEndDensityThreshold = 0.5f;
-        private const float StrongEndEnergyThreshold = 0.6f;
-        private const float StrongEndAccentThreshold = 0.75f;
-        private const float SupportComplementarityDelta = 0.05f;
-
-        private readonly IRandomSource randomSource;
+        private readonly ResponsePlannerConfig config;
 
         public ResponsePlanner()
-            : this(new SystemRandomSource())
+            : this(new ResponsePlannerConfig())
         {
         }
 
-        public ResponsePlanner(int seed)
-            : this(new SystemRandomSource(seed))
+        public ResponsePlanner(ResponsePlannerConfig config)
         {
-        }
-
-        public ResponsePlanner(Random random)
-            : this(new SystemRandomSource(random))
-        {
-        }
-
-        public ResponsePlanner(IRandomSource randomSource)
-        {
-            this.randomSource = randomSource ?? throw new ArgumentNullException(nameof(randomSource));
+            this.config = config ?? throw new ArgumentNullException(nameof(config));
         }
 
         public ResponsePlan Plan(TurnAnalysisResult analysis)
@@ -45,351 +24,334 @@ namespace IT4s.Rhythm.ResponsePlanning
             if (analysis == null)
                 throw new ArgumentNullException(nameof(analysis));
 
-            ResponseType type = DecideType(analysis);
-            ResponsePlan plan = BuildPlan(type, analysis);
-            plan = ApplyStochasticVariation(plan);
-            return Clamp(plan);
+            PlanningContext context = BuildContext(analysis);
+            ResponseType responseType = ChooseResponseType(context);
+            return DerivePlan(context, responseType);
         }
 
-        private ResponseType DecideType(TurnAnalysisResult analysis)
+        private PlanningContext BuildContext(TurnAnalysisResult analysis)
         {
-            if (HasStrongEndActivity(analysis))
+            DensityFeatures density = GetDensity(analysis);
+            EnergyFeatures energy = GetEnergy(analysis);
+            AnchorFeatures anchors = GetAnchors(analysis);
+            EndActivityFeatures endActivity = GetEndActivity(analysis);
+            SegmentActivityProfileFeatures profile = GetSegmentActivityProfile(analysis);
+
+            float sourceDensity = Clamp01(density.StepDensity);
+            float sourceEnergy = Clamp01(energy.MeanVelocity / MaxVelocity);
+            float endEnergy = Clamp01(endActivity.EndEnergy / MaxVelocity);
+            float endAccent = Clamp01(endActivity.EndAccent / MaxVelocity);
+            bool hasMeaningfulAnchors =
+                anchors.AnchorCount >= config.MeaningfulAnchorCountThreshold &&
+                anchors.StrongestAnchorScore >= config.MeaningfulAnchorScoreThreshold;
+            bool hasStrongEnding =
+                anchors.HasClosingAnchor ||
+                (endActivity.EndDensity >= config.StrongEndingDensityThreshold &&
+                (endEnergy >= config.StrongEndingEnergyThreshold ||
+                endAccent >= config.StrongEndingAccentThreshold));
+            bool endingIsOpen =
+                !anchors.HasClosingAnchor &&
+                endActivity.EndDensity <= config.OpenEndingDensityThreshold &&
+                endEnergy <= config.OpenEndingEnergyThreshold &&
+                endAccent <= config.OpenEndingAccentThreshold;
+            bool activityIsBackLoaded = HasLateBias(profile.DensityShape) || HasLateBias(profile.EnergyShape);
+            bool activityIsFrontLoaded = HasEarlyBias(profile.DensityShape) || HasEarlyBias(profile.EnergyShape);
+            bool isSparse = sourceDensity < config.SparseDensityThreshold;
+            bool isBusy = sourceDensity > config.BusyDensityThreshold;
+            bool isLowEnergy = energy.IsLowEnergy || sourceEnergy < config.LowEnergyThreshold;
+            bool isHighEnergy = energy.IsHighEnergy || sourceEnergy > config.HighEnergyThreshold;
+            bool hasMeaningfulGaps = sourceDensity <= config.GapDensityThreshold;
+            bool isCongested = sourceDensity >= config.CongestedDensityThreshold || (isBusy && isHighEnergy);
+
+            return new PlanningContext(
+                sourceDensity,
+                sourceEnergy,
+                anchors.AnchorCount,
+                hasMeaningfulAnchors,
+                hasStrongEnding,
+                endingIsOpen,
+                activityIsBackLoaded,
+                activityIsFrontLoaded,
+                isSparse,
+                isBusy,
+                isLowEnergy,
+                isHighEnergy,
+                hasMeaningfulGaps,
+                isCongested,
+                GetTurnLengthSteps(analysis));
+        }
+
+        private ResponseType ChooseResponseType(PlanningContext context)
+        {
+            float mirrorScore = ScoreMirror(context);
+            float complementScore = ScoreComplement(context);
+            float simplifyScore = ScoreSimplify(context);
+            float intensifyScore = ScoreIntensify(context);
+            float contrastScore = ScoreContrast(context);
+            float fillScore = ScoreFill(context);
+            float bestScore = GetBestScore(mirrorScore, complementScore, simplifyScore, intensifyScore, contrastScore, fillScore);
+
+            bool mirrorTop = IsTopScore(mirrorScore, bestScore);
+            bool complementTop = IsTopScore(complementScore, bestScore);
+            bool simplifyTop = IsTopScore(simplifyScore, bestScore);
+            bool intensifyTop = IsTopScore(intensifyScore, bestScore);
+            bool contrastTop = IsTopScore(contrastScore, bestScore);
+            bool fillTop = IsTopScore(fillScore, bestScore);
+
+            if (complementTop && mirrorTop && context.HasMeaningfulGaps)
+                return ResponseType.Complement;
+
+            if (fillTop && intensifyTop && context.EndingIsOpen)
                 return ResponseType.Fill;
 
-            if (HasStrongAnchors(analysis) && HasHighSupport(analysis))
-                return ResponseType.Mirror;
-
-            if (HasAnchors(analysis) && HasLowSupport(analysis))
-                return IsBelowMidLevel(analysis)
-                    ? ResponseType.Intensify
-                    : ResponseType.Complement;
-
-            if (HasAnchors(analysis))
-                return ResponseType.Complement;
-
-            if (IsLowDensity(analysis) || IsLowEnergy(analysis))
-                return ResponseType.Intensify;
-
-            if (IsHighDensity(analysis) && IsHighEnergy(analysis))
+            if (simplifyTop && contrastTop && context.IsBusy)
                 return ResponseType.Simplify;
 
-            if (IsStrongDirectionalSap(analysis))
+            if (mirrorTop && contrastTop && context.HasMeaningfulAnchors)
+                return ResponseType.Mirror;
+
+            if (mirrorTop)
+                return ResponseType.Mirror;
+            if (complementTop)
+                return ResponseType.Complement;
+            if (simplifyTop)
+                return ResponseType.Simplify;
+            if (intensifyTop)
+                return ResponseType.Intensify;
+            if (contrastTop)
                 return ResponseType.Contrast;
 
-            if (IsRisingSap(analysis))
-                return ResponseType.Complement;
-
-            return ResponseType.Mirror;
+            return ResponseType.Fill;
         }
 
-        private ResponsePlan BuildPlan(ResponseType type, TurnAnalysisResult analysis)
+        private ResponsePlan DerivePlan(PlanningContext context, ResponseType responseType)
         {
-            float density = GetDensityLevel(analysis);
-            float energy = GetEnergyLevel(analysis);
-            int turnLengthSteps = GetTurnLengthSteps(analysis);
+            ResponsePlan plan = new ResponsePlan(
+                responseType,
+                DeriveTargetDensity(context, responseType),
+                DeriveComplementarityBias(context, responseType),
+                DerivePreserveAnchors(context, responseType),
+                DeriveMirrorEnding(context, responseType),
+                context.TurnLengthSteps);
 
-            SamplePlanParameters(
-                type,
-                out float variationAmount,
-                out float syncopationBias,
-                out float complementarityBias);
-
-            complementarityBias = ModulateComplementarity(
-                complementarityBias,
-                GetAnchorSupport(analysis));
-
-            switch (type)
-            {
-                case ResponseType.Mirror:
-                    return new ResponsePlan(
-                        type,
-                        density,
-                        energy,
-                        true,
-                        true,
-                        variationAmount,
-                        syncopationBias,
-                        complementarityBias,
-                        turnLengthSteps);
-
-                case ResponseType.Complement:
-                    return new ResponsePlan(
-                        type,
-                        density * 0.9f,
-                        energy * 0.9f,
-                        false,
-                        false,
-                        variationAmount,
-                        syncopationBias,
-                        complementarityBias,
-                        turnLengthSteps);
-
-                case ResponseType.Simplify:
-                    return new ResponsePlan(
-                        type,
-                        density * 0.6f,
-                        energy * 0.7f,
-                        true,
-                        false,
-                        variationAmount,
-                        syncopationBias,
-                        complementarityBias,
-                        turnLengthSteps);
-
-                case ResponseType.Intensify:
-                    return new ResponsePlan(
-                        type,
-                        density + 0.2f,
-                        energy + 0.15f,
-                        false,
-                        false,
-                        variationAmount,
-                        syncopationBias,
-                        complementarityBias,
-                        turnLengthSteps);
-
-                case ResponseType.Contrast:
-                    return new ResponsePlan(
-                        type,
-                        1f - density,
-                        1f - energy,
-                        false,
-                        false,
-                        variationAmount,
-                        syncopationBias,
-                        complementarityBias,
-                        turnLengthSteps);
-
-                case ResponseType.Fill:
-                    return new ResponsePlan(
-                        type,
-                        density + 0.25f,
-                        energy + 0.2f,
-                        false,
-                        true,
-                        variationAmount,
-                        syncopationBias,
-                        complementarityBias,
-                        turnLengthSteps);
-
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown response type.");
-            }
-        }
-
-        private ResponsePlan ApplyStochasticVariation(ResponsePlan plan)
-        {
-            return plan.With(
-                targetDensity: plan.TargetDensity + NextSigned(0.05f),
-                targetEnergy: plan.TargetEnergy + NextSigned(0.05f),
-                variationAmount: plan.VariationAmount + NextSigned(0.1f),
-                syncopationBias: plan.SyncopationBias + NextSigned(0.1f),
-                complementarityBias: plan.ComplementarityBias + NextSigned(0.05f));
+            return Clamp(plan);
         }
 
         private static ResponsePlan Clamp(ResponsePlan plan)
         {
             return plan.With(
                 targetDensity: Clamp01(plan.TargetDensity),
-                targetEnergy: Clamp01(plan.TargetEnergy),
-                variationAmount: Clamp01(plan.VariationAmount),
-                syncopationBias: Clamp01(plan.SyncopationBias),
                 complementarityBias: Clamp01(plan.ComplementarityBias),
                 turnLengthSteps: Math.Max(1, plan.TurnLengthSteps));
         }
 
-        private float NextSigned(float magnitude)
+        private float DeriveTargetDensity(PlanningContext context, ResponseType responseType)
         {
-            return (float)((randomSource.NextDouble() * 2d - 1d) * magnitude);
+            float density = context.SourceDensity + GetDensityDelta(responseType) + GetDensityContextModifier(context, responseType);
+            return Clamp(density, config.MinTargetDensity, config.MaxTargetDensity);
         }
 
-        private float SampleRange(float minimum, float maximum)
+        private float DeriveComplementarityBias(PlanningContext context, ResponseType responseType)
         {
-            return minimum + (float)(randomSource.NextDouble() * (maximum - minimum));
+            float bias = GetBaselineComplementarityBias(responseType);
+
+            if (context.IsCongested || context.HasMeaningfulGaps)
+                bias += config.ComplementarityAdjustment;
+
+            if (context.HasMeaningfulAnchors)
+                bias -= config.ComplementarityAdjustment;
+
+            if (responseType == ResponseType.Mirror && context.HasStrongEnding)
+                bias -= config.ComplementarityAdjustment;
+
+            if (responseType == ResponseType.Fill && context.EndingIsOpen)
+                bias += config.ComplementarityAdjustment * 0.5f;
+
+            return Clamp01(bias);
         }
 
-        private void SamplePlanParameters(
-            ResponseType type,
-            out float variationAmount,
-            out float syncopationBias,
-            out float complementarityBias)
+        private static bool DerivePreserveAnchors(PlanningContext context, ResponseType responseType)
         {
-            switch (type)
+            if (!context.HasMeaningfulAnchors)
+                return false;
+
+            switch (responseType)
             {
                 case ResponseType.Mirror:
-                    variationAmount = SampleRange(0.15f, 0.30f);
-                    syncopationBias = SampleRange(0.25f, 0.40f);
-                    complementarityBias = SampleRange(0.10f, 0.30f);
-                    break;
-
                 case ResponseType.Complement:
-                    variationAmount = SampleRange(0.30f, 0.50f);
-                    syncopationBias = SampleRange(0.40f, 0.65f);
-                    complementarityBias = SampleRange(0.70f, 0.90f);
-                    break;
-
+                    return !context.IsCongested || responseType == ResponseType.Mirror;
                 case ResponseType.Simplify:
-                    variationAmount = SampleRange(0.10f, 0.25f);
-                    syncopationBias = SampleRange(0.10f, 0.30f);
-                    complementarityBias = SampleRange(0.20f, 0.40f);
-                    break;
-
-                case ResponseType.Intensify:
-                    variationAmount = SampleRange(0.35f, 0.60f);
-                    syncopationBias = SampleRange(0.50f, 0.75f);
-                    complementarityBias = SampleRange(0.50f, 0.70f);
-                    break;
-
+                    return !context.IsCongested && context.HasStrongEnding;
                 case ResponseType.Contrast:
-                    variationAmount = SampleRange(0.50f, 0.80f);
-                    syncopationBias = SampleRange(0.60f, 0.85f);
-                    complementarityBias = SampleRange(0.40f, 0.60f);
-                    break;
-
+                case ResponseType.Intensify:
+                    return false;
                 case ResponseType.Fill:
-                    variationAmount = SampleRange(0.60f, 0.90f);
-                    syncopationBias = SampleRange(0.70f, 0.95f);
-                    complementarityBias = SampleRange(0.60f, 0.80f);
-                    break;
-
+                    return context.HasStrongEnding && !context.EndingIsOpen;
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown response type.");
+                    throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
             }
         }
 
-        private static bool HasStrongEndActivity(TurnAnalysisResult analysis)
+        private static bool DeriveMirrorEnding(PlanningContext context, ResponseType responseType)
         {
-            EndActivityFeatures endActivity = GetEndActivity(analysis);
-
-            if (endActivity.EndDensity < StrongEndDensityThreshold)
-                return false;
-
-            float endEnergy = Clamp01(endActivity.EndEnergy / MaxVelocity);
-            float endAccent = Clamp01(endActivity.EndAccent / MaxVelocity);
-
-            return endEnergy >= StrongEndEnergyThreshold
-                || endAccent >= StrongEndAccentThreshold;
+            return context.HasStrongEnding && responseType == ResponseType.Mirror;
         }
 
-        private static bool HasStrongAnchors(TurnAnalysisResult analysis)
+        private static float ScoreMirror(PlanningContext context)
         {
-            AnchorFeatures anchors = GetAnchors(analysis);
-            return anchors.AnchorCount > 0
-                && anchors.StrongestAnchorScore >= StrongAnchorThreshold;
+            float score = 0f;
+            if (context.IsBalancedDensity) score += 2f;
+            if (context.IsMediumEnergy) score += 1f;
+            if (context.HasMeaningfulAnchors) score += 2f;
+            if (context.HasStrongEnding) score += 2f;
+            if (context.EndingIsOpen) score -= 1f;
+            return score;
         }
 
-        private static bool HasAnchors(TurnAnalysisResult analysis)
+        private static float ScoreComplement(PlanningContext context)
         {
-            return GetAnchors(analysis).AnchorCount > 0;
+            float score = 0f;
+            if (context.IsSparse) score += 1f;
+            if (context.IsBalancedDensity) score += 1f;
+            if (context.IsMediumEnergy) score += 1f;
+            if (context.HasMeaningfulAnchors) score += 2f;
+            else score -= 0.5f;
+            if (context.HasMeaningfulGaps) score += 1f;
+            if (!context.HasStrongEnding) score += 1f;
+            if (context.ActivityIsBackLoaded || context.ActivityIsFrontLoaded) score += 0.5f;
+            return score;
         }
 
-        private static bool HasHighSupport(TurnAnalysisResult analysis)
+        private static float ScoreSimplify(PlanningContext context)
         {
-            return GetAnchorSupport(analysis).AverageSupport > HighSupportThreshold;
+            float score = 0f;
+            if (context.IsBusy) score += 3f;
+            if (context.IsHighEnergy) score += 2f;
+            if (context.HasMeaningfulAnchors) score += 1f;
+            if (context.IsCongested) score += 1f;
+            if (context.IsSparse) score -= 2f;
+            if (context.IsLowEnergy) score -= 1f;
+            return score;
         }
 
-        private static bool HasLowSupport(TurnAnalysisResult analysis)
+        private static float ScoreIntensify(PlanningContext context)
         {
-            return GetAnchorSupport(analysis).AverageSupport < LowSupportThreshold;
+            float score = 0f;
+            if (context.IsSparse) score += 2f;
+            if (context.IsLowEnergy) score += 2f;
+            if (!context.HasMeaningfulAnchors) score += 1f;
+            if (context.EndingIsOpen) score += 1f;
+            if (context.IsBusy) score -= 1f;
+            return score;
         }
 
-        private static bool IsBelowMidLevel(TurnAnalysisResult analysis)
+        private static float ScoreContrast(PlanningContext context)
         {
-            return GetDensityLevel(analysis) < MidLevelThreshold
-                || GetEnergyLevel(analysis) < MidLevelThreshold;
+            float score = 0f;
+            if (context.IsBusy) score += 2f;
+            if (context.IsHighEnergy) score += 1f;
+            if (!context.HasMeaningfulAnchors) score += 1f;
+            if (context.ActivityIsBackLoaded || context.ActivityIsFrontLoaded) score += 2f;
+            if (context.HasMeaningfulAnchors) score -= 1f;
+            return score;
         }
 
-        private static bool IsLowDensity(TurnAnalysisResult analysis)
+        private static float ScoreFill(PlanningContext context)
         {
-            return GetDensityLevel(analysis) < LowDensityThreshold;
+            float score = 0f;
+            if (context.IsSparse) score += 2f;
+            if (context.IsLowEnergy) score += 1f;
+            if (context.EndingIsOpen) score += 3f;
+            if (context.ActivityIsBackLoaded) score += 1f;
+            if (context.HasStrongEnding) score -= 1f;
+            return score;
         }
 
-        private static bool IsHighDensity(TurnAnalysisResult analysis)
+        private float GetDensityDelta(ResponseType responseType)
         {
-            return GetDensityLevel(analysis) > HighDensityThreshold;
+            switch (responseType)
+            {
+                case ResponseType.Mirror: return 0.00f;
+                case ResponseType.Complement: return -0.05f;
+                case ResponseType.Simplify: return -0.15f;
+                case ResponseType.Intensify: return 0.12f;
+                case ResponseType.Contrast: return 0.00f;
+                case ResponseType.Fill: return 0.15f;
+                default: throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
+            }
         }
 
-        private static bool IsLowEnergy(TurnAnalysisResult analysis)
+        private static float GetBaselineComplementarityBias(ResponseType responseType)
         {
-            EnergyFeatures energy = GetEnergy(analysis);
-            return energy.IsLowEnergy || GetEnergyLevel(analysis) < LowDensityThreshold;
+            switch (responseType)
+            {
+                case ResponseType.Mirror: return 0.30f;
+                case ResponseType.Complement: return 0.75f;
+                case ResponseType.Simplify: return 0.40f;
+                case ResponseType.Intensify: return 0.55f;
+                case ResponseType.Contrast: return 0.65f;
+                case ResponseType.Fill: return 0.70f;
+                default: throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
+            }
         }
 
-        private static bool IsHighEnergy(TurnAnalysisResult analysis)
+        private float GetDensityContextModifier(PlanningContext context, ResponseType responseType)
         {
-            EnergyFeatures energy = GetEnergy(analysis);
-            return energy.IsHighEnergy || GetEnergyLevel(analysis) > HighDensityThreshold;
+            float adjustment = config.DensityContextAdjustment;
+
+            switch (responseType)
+            {
+                case ResponseType.Mirror:
+                    return context.IsHighEnergy && !context.IsBusy ? adjustment * 0.5f : 0f;
+                case ResponseType.Complement:
+                    return context.IsCongested ? -adjustment * 0.5f : 0f;
+                case ResponseType.Simplify:
+                    if (context.IsBusy && context.IsHighEnergy) return -adjustment;
+                    return context.IsBusy ? -adjustment * 0.5f : 0f;
+                case ResponseType.Intensify:
+                    if (context.IsSparse && !context.HasStrongEnding) return adjustment * 0.5f;
+                    return context.HasStrongEnding ? -adjustment * 0.5f : 0f;
+                case ResponseType.Contrast:
+                    return context.ActivityIsBackLoaded || context.ActivityIsFrontLoaded ? adjustment * 0.5f : 0f;
+                case ResponseType.Fill:
+                    if (context.EndingIsOpen || context.ActivityIsBackLoaded) return adjustment;
+                    return context.HasStrongEnding ? -adjustment * 0.5f : 0f;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
+            }
         }
 
-        private static bool IsStrongDirectionalSap(TurnAnalysisResult analysis)
+        private bool IsTopScore(float score, float bestScore)
         {
-            SegmentActivityProfileFeatures sap = GetSegmentActivityProfile(analysis);
-            TemporalBias densityBias = GetTemporalBias(sap.DensityShape);
-            TemporalBias energyBias = GetTemporalBias(sap.EnergyShape);
-
-            return densityBias != TemporalBias.Neutral
-                && densityBias == energyBias;
+            return bestScore - score <= config.ScoreTieMargin;
         }
 
-        private static bool IsRisingSap(TurnAnalysisResult analysis)
+        private static float GetBestScore(
+            float mirrorScore,
+            float complementScore,
+            float simplifyScore,
+            float intensifyScore,
+            float contrastScore,
+            float fillScore)
         {
-            SegmentActivityProfileFeatures sap = GetSegmentActivityProfile(analysis);
-            return HasLateBias(sap.DensityShape)
-                || HasLateBias(sap.EnergyShape);
+            return Math.Max(
+                Math.Max(Math.Max(mirrorScore, complementScore), Math.Max(simplifyScore, intensifyScore)),
+                Math.Max(contrastScore, fillScore));
         }
 
         private static bool HasLateBias(ActivityShape shape)
         {
-            return GetTemporalBias(shape) == TemporalBias.Late;
+            return shape == ActivityShape.Increasing || shape == ActivityShape.BackLoaded;
         }
 
-        // Planner-level interpretation: late-biased shapes imply buildup,
-        // while shared early/late bias across density and energy implies a strong direction.
-        private static TemporalBias GetTemporalBias(ActivityShape shape)
+        private static bool HasEarlyBias(ActivityShape shape)
         {
-            switch (shape)
-            {
-                case ActivityShape.Increasing:
-                case ActivityShape.BackLoaded:
-                    return TemporalBias.Late;
-
-                case ActivityShape.Decreasing:
-                case ActivityShape.FrontLoaded:
-                    return TemporalBias.Early;
-
-                default:
-                    return TemporalBias.Neutral;
-            }
-        }
-
-        private static float ModulateComplementarity(
-            float complementarity,
-            AnchorSupportFeatures anchorSupport)
-        {
-            if (anchorSupport.AverageSupport < LowSupportThreshold)
-                return complementarity + SupportComplementarityDelta;
-
-            if (anchorSupport.AverageSupport > HighSupportThreshold)
-                return complementarity - SupportComplementarityDelta;
-
-            return complementarity;
-        }
-
-        private static float GetDensityLevel(TurnAnalysisResult analysis)
-        {
-            return Clamp01(GetDensity(analysis).StepDensity);
-        }
-
-        private static float GetEnergyLevel(TurnAnalysisResult analysis)
-        {
-            return Clamp01(GetEnergy(analysis).MeanVelocity / MaxVelocity);
+            return shape == ActivityShape.Decreasing || shape == ActivityShape.FrontLoaded;
         }
 
         private static int GetTurnLengthSteps(TurnAnalysisResult analysis)
         {
-            return Math.Max(
-                GetDensity(analysis).StepCount,
-                GetAnchors(analysis).StepCount);
+            return Math.Max(GetDensity(analysis).StepCount, GetAnchors(analysis).StepCount);
         }
 
         private static DensityFeatures GetDensity(TurnAnalysisResult analysis)
@@ -407,11 +369,6 @@ namespace IT4s.Rhythm.ResponsePlanning
             return analysis.Anchor ?? new AnchorFeatures();
         }
 
-        private static AnchorSupportFeatures GetAnchorSupport(TurnAnalysisResult analysis)
-        {
-            return analysis.AnchorSupport ?? new AnchorSupportFeatures();
-        }
-
         private static EndActivityFeatures GetEndActivity(TurnAnalysisResult analysis)
         {
             return analysis.EndActivity ?? new EndActivityFeatures();
@@ -424,20 +381,16 @@ namespace IT4s.Rhythm.ResponsePlanning
 
         private static float Clamp01(float value)
         {
-            if (value < 0f)
-                return 0f;
-
-            if (value > 1f)
-                return 1f;
-
+            if (value < 0f) return 0f;
+            if (value > 1f) return 1f;
             return value;
         }
 
-        private enum TemporalBias
+        private static float Clamp(float value, float minimum, float maximum)
         {
-            Neutral,
-            Early,
-            Late
+            if (value < minimum) return minimum;
+            if (value > maximum) return maximum;
+            return value;
         }
     }
 }

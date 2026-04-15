@@ -5,63 +5,48 @@ namespace IT4s.Rhythm.ResponsePlanning.Models
     [Serializable]
     public sealed class ResponsePlan
     {
-        public ResponseType Type { get; private set; }
+        public ResponseType ResponseType { get; private set; }
         public float TargetDensity { get; private set; }
-        public float TargetEnergy { get; private set; }
+        public float ComplementarityBias { get; private set; }
         public bool PreserveAnchors { get; private set; }
         public bool MirrorEnding { get; private set; }
-        public float VariationAmount { get; private set; }
-        public float SyncopationBias { get; private set; }
-        public float ComplementarityBias { get; private set; }
         public int TurnLengthSteps { get; private set; }
 
         public ResponsePlan()
-            : this(ResponseType.Mirror, 0f, 0f, false, false, 0f, 0f, 0f, 0)
+            : this(ResponseType.Mirror, 0f, 0f, false, false, 0)
         {
         }
 
         public ResponsePlan(
-            ResponseType type,
+            ResponseType responseType,
             float targetDensity,
-            float targetEnergy,
+            float complementarityBias,
             bool preserveAnchors,
             bool mirrorEnding,
-            float variationAmount,
-            float syncopationBias,
-            float complementarityBias,
             int turnLengthSteps)
         {
-            Type = type;
+            ResponseType = responseType;
             TargetDensity = targetDensity;
-            TargetEnergy = targetEnergy;
+            ComplementarityBias = complementarityBias;
             PreserveAnchors = preserveAnchors;
             MirrorEnding = mirrorEnding;
-            VariationAmount = variationAmount;
-            SyncopationBias = syncopationBias;
-            ComplementarityBias = complementarityBias;
             TurnLengthSteps = turnLengthSteps;
         }
 
         public ResponsePlan With(
-            ResponseType? type = null,
+            ResponseType? responseType = null,
             float? targetDensity = null,
-            float? targetEnergy = null,
+            float? complementarityBias = null,
             bool? preserveAnchors = null,
             bool? mirrorEnding = null,
-            float? variationAmount = null,
-            float? syncopationBias = null,
-            float? complementarityBias = null,
             int? turnLengthSteps = null)
         {
             return new ResponsePlan(
-                type ?? Type,
+                responseType ?? ResponseType,
                 targetDensity ?? TargetDensity,
-                targetEnergy ?? TargetEnergy,
+                complementarityBias ?? ComplementarityBias,
                 preserveAnchors ?? PreserveAnchors,
                 mirrorEnding ?? MirrorEnding,
-                variationAmount ?? VariationAmount,
-                syncopationBias ?? SyncopationBias,
-                complementarityBias ?? ComplementarityBias,
                 turnLengthSteps ?? TurnLengthSteps);
         }
     }

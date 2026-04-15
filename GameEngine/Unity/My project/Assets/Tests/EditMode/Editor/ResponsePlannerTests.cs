@@ -10,21 +10,7 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
     public sealed class ResponsePlannerTests
     {
         [Test]
-        public void Plan_StrongEndActivity_ReturnsFill()
-        {
-            ResponsePlan plan = Planner().Plan(
-                Analysis(
-                    density: 0.55f,
-                    energy: 0.55f,
-                    endDensity: 0.75f,
-                    endEnergy: 0.8f,
-                    endAccent: 120));
-
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Fill));
-        }
-
-        [Test]
-        public void Plan_StrongAnchorsWithHighSupport_ReturnsMirror()
+        public void Plan_BalancedAnchoredStrongEnding_ReturnsMirror()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
@@ -32,283 +18,142 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
                     energy: 0.55f,
                     anchorCount: 2,
                     strongestAnchorScore: 0.8f,
-                    averageSupport: 0.8f));
+                    endDensity: 0.75f,
+                    endEnergy: 0.8f,
+                    endAccent: 120));
 
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Mirror));
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Mirror));
+            Assert.That(plan.MirrorEnding, Is.True);
         }
 
         [Test]
-        public void Plan_AnchorsWithLowSupportAndBelowMidLevel_ReturnsIntensify()
+        public void Plan_BalancedAnchoredGappedInput_PrefersComplementOverMirror()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
-                    density: 0.3f,
-                    energy: 0.45f,
-                    anchorCount: 1,
-                    strongestAnchorScore: 0.6f,
-                    averageSupport: 0.2f));
+                    density: 0.55f,
+                    energy: 0.55f,
+                    anchorCount: 2,
+                    strongestAnchorScore: 0.8f));
 
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Intensify));
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Complement));
+            Assert.That(plan.PreserveAnchors, Is.True);
         }
 
         [Test]
-        public void Plan_AnchorsWithLowSupportAndMidLevelActivity_ReturnsComplement()
+        public void Plan_BusyHighEnergy_ReturnsSimplify()
         {
-            ResponsePlan plan = Planner().Plan(
-                Analysis(
-                    density: 0.6f,
-                    energy: 0.6f,
-                    anchorCount: 1,
-                    strongestAnchorScore: 0.6f,
-                    averageSupport: 0.2f));
+            ResponsePlan plan = Planner().Plan(Analysis(density: 0.85f, energy: 0.8f));
 
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Complement));
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Simplify));
         }
 
         [Test]
-        public void Plan_AnchorsPresentWithoutSupportExtremes_ReturnsComplement()
-        {
-            ResponsePlan plan = Planner().Plan(
-                Analysis(
-                    density: 0.6f,
-                    energy: 0.6f,
-                    anchorCount: 1,
-                    strongestAnchorScore: 0.6f,
-                    averageSupport: 0.5f));
-
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Complement));
-        }
-
-        [Test]
-        public void Plan_LowDensityOrLowEnergy_ReturnsIntensify()
+        public void Plan_SparseLowEnergyWithoutWeakEnding_ReturnsIntensify()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
                     density: 0.2f,
-                    energy: 0.55f));
+                    energy: 0.2f,
+                    endDensity: 0.35f,
+                    endEnergy: 0.4f,
+                    endAccent: 60));
 
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Intensify));
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Intensify));
         }
 
         [Test]
-        public void Plan_HighDensityAndHighEnergy_ReturnsSimplify()
+        public void Plan_SparseLowEnergyOpenEnding_PrefersFillOverIntensify()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
-                    density: 0.8f,
-                    energy: 0.8f));
+                    density: 0.2f,
+                    energy: 0.2f,
+                    endDensity: 0.1f,
+                    endEnergy: 0.1f,
+                    endAccent: 0));
 
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Simplify));
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Fill));
+            Assert.That(plan.MirrorEnding, Is.False);
         }
 
         [Test]
-        public void Plan_SharedEarlyDirectionalSap_ReturnsContrast()
-        {
-            ResponsePlan plan = Planner().Plan(
-                Analysis(
-                    density: 0.55f,
-                    energy: 0.55f,
-                    densityShape: ActivityShape.Decreasing,
-                    energyShape: ActivityShape.Decreasing));
-
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Contrast));
-        }
-
-        [Test]
-        public void Plan_SharedLateDirectionalSap_ReturnsContrast()
+        public void Plan_DirectionalHighEnergyWithoutMeaningfulAnchors_ReturnsContrast()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
                     density: 0.55f,
-                    energy: 0.55f,
+                    energy: 0.8f,
                     densityShape: ActivityShape.BackLoaded,
                     energyShape: ActivityShape.BackLoaded));
 
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Contrast));
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Contrast));
         }
 
         [Test]
-        public void Plan_LateBiasedSapWithoutSharedDirection_ReturnsComplement()
+        public void Plan_ComplementWithMeaningfulAnchors_DoesNotDropAnchorPreservation()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
                     density: 0.55f,
                     energy: 0.55f,
-                    densityShape: ActivityShape.BackLoaded,
-                    energyShape: ActivityShape.Flat));
-
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Complement));
-        }
-
-        [Test]
-        public void Plan_NoHigherPriorityRuleMatches_ReturnsMirror()
-        {
-            ResponsePlan plan = Planner().Plan(
-                Analysis(
-                    density: 0.55f,
-                    energy: 0.55f));
-
-            Assert.That(plan.Type, Is.EqualTo(ResponseType.Mirror));
-        }
-
-        [Test]
-        public void Plan_ClampsContinuousOutputsToUnitRange()
-        {
-            ResponsePlan upperPlan = new ResponsePlanner(new ConstantRandomSource(1d)).Plan(
-                Analysis(
-                    density: 0.95f,
-                    energy: 0.95f,
-                    averageSupport: 0.2f,
-                    endDensity: 1f,
-                    endEnergy: 1f,
-                    endAccent: 127));
-
-            AssertPlanRange(upperPlan);
-            Assert.That(upperPlan.TargetDensity, Is.EqualTo(1f).Within(0.0001f));
-            Assert.That(upperPlan.TargetEnergy, Is.EqualTo(1f).Within(0.0001f));
-
-            ResponsePlan lowerPlan = new ResponsePlanner(new ConstantRandomSource(0d)).Plan(
-                Analysis(
-                    density: 0f,
-                    energy: 0f,
                     anchorCount: 1,
-                    strongestAnchorScore: 0.8f,
-                    averageSupport: 0.8f));
+                    strongestAnchorScore: 0.8f));
 
-            AssertPlanRange(lowerPlan);
-            Assert.That(lowerPlan.TargetDensity, Is.EqualTo(0f).Within(0.0001f));
-            Assert.That(lowerPlan.TargetEnergy, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Complement));
+            Assert.That(plan.PreserveAnchors, Is.True);
         }
 
         [Test]
-        public void Plan_ClampsTurnLengthStepsToAtLeastOne()
+        public void Plan_ClampsDensityAndTurnLengthStepsToConfiguredBounds()
         {
             ResponsePlan plan = Planner().Plan(
                 Analysis(
-                    density: 0.55f,
-                    energy: 0.55f,
-                    stepCount: 0));
+                    density: 0.69f,
+                    energy: 0.2f,
+                    stepCount: 0,
+                    endDensity: 0.1f,
+                    endEnergy: 0.1f,
+                    endAccent: 0));
 
+            Assert.That(plan.TargetDensity, Is.EqualTo(0.8f).Within(0.0001f));
             Assert.That(plan.TurnLengthSteps, Is.EqualTo(1));
         }
 
-        [TestCase(ResponseType.Mirror, 0.225f, 0.325f, 0.15f)]
-        [TestCase(ResponseType.Complement, 0.4f, 0.525f, 0.8f)]
-        [TestCase(ResponseType.Simplify, 0.175f, 0.2f, 0.3f)]
-        [TestCase(ResponseType.Intensify, 0.475f, 0.625f, 0.6f)]
-        [TestCase(ResponseType.Contrast, 0.65f, 0.725f, 0.5f)]
-        [TestCase(ResponseType.Fill, 0.75f, 0.825f, 0.7f)]
-        public void Plan_AssignsRangedParametersPerResponseType(
-            ResponseType responseType,
-            float expectedVariationAmount,
-            float expectedSyncopationBias,
-            float expectedComplementarityBias)
-        {
-            ResponsePlan plan = Planner().Plan(AnalysisForType(responseType));
-
-            Assert.That(plan.Type, Is.EqualTo(responseType));
-            Assert.That(plan.VariationAmount, Is.EqualTo(expectedVariationAmount).Within(0.0001f));
-            Assert.That(plan.SyncopationBias, Is.EqualTo(expectedSyncopationBias).Within(0.0001f));
-            Assert.That(plan.ComplementarityBias, Is.EqualTo(expectedComplementarityBias).Within(0.0001f));
-        }
-
         [Test]
-        public void Plan_ModulatesComplementarityBiasFromSupportAfterRangeSampling()
+        public void Plan_SameInput_ProducesDeterministicPlan()
         {
-            ResponsePlan lowSupportPlan = Planner().Plan(
-                Analysis(
-                    density: 0.8f,
-                    energy: 0.8f,
-                    averageSupport: 0.2f));
-
-            ResponsePlan highSupportPlan = Planner().Plan(
-                Analysis(
-                    density: 0.8f,
-                    energy: 0.8f,
-                    averageSupport: 0.8f));
-
-            Assert.That(lowSupportPlan.Type, Is.EqualTo(ResponseType.Simplify));
-            Assert.That(highSupportPlan.Type, Is.EqualTo(ResponseType.Simplify));
-            Assert.That(lowSupportPlan.ComplementarityBias, Is.EqualTo(0.35f).Within(0.0001f));
-            Assert.That(highSupportPlan.ComplementarityBias, Is.EqualTo(0.25f).Within(0.0001f));
-            Assert.That(lowSupportPlan.ComplementarityBias, Is.GreaterThan(highSupportPlan.ComplementarityBias));
-        }
-
-        [Test]
-        public void Plan_SameSeed_ProducesDeterministicResults()
-        {
-            var firstPlanner = new ResponsePlanner(12345);
-            var secondPlanner = new ResponsePlanner(12345);
             TurnAnalysisResult analysis = Analysis(
                 density: 0.62f,
                 energy: 0.58f,
                 anchorCount: 1,
-                strongestAnchorScore: 0.6f,
-                averageSupport: 0.5f);
+                strongestAnchorScore: 0.7f);
 
-            ResponsePlan firstPlan = firstPlanner.Plan(analysis);
-            ResponsePlan secondPlan = secondPlanner.Plan(analysis);
+            ResponsePlan firstPlan = Planner().Plan(analysis);
+            ResponsePlan secondPlan = Planner().Plan(analysis);
 
             AssertPlansEqual(firstPlan, secondPlan);
         }
 
-        private static ResponsePlanner Planner()
+        [Test]
+        public void Plan_OutputsOnlyCorePlannerFields()
         {
-            return new ResponsePlanner(new ConstantRandomSource(0.5d));
+            ResponsePlan plan = Planner().Plan(
+                Analysis(
+                    density: 0.55f,
+                    energy: 0.55f,
+                    anchorCount: 1,
+                    strongestAnchorScore: 0.8f));
+
+            Assert.That(plan.ResponseType, Is.EqualTo(ResponseType.Complement));
+            Assert.That(plan.TargetDensity, Is.InRange(0f, 1f));
+            Assert.That(plan.ComplementarityBias, Is.InRange(0f, 1f));
+            Assert.That(plan.TurnLengthSteps, Is.GreaterThanOrEqualTo(1));
         }
 
-        private static TurnAnalysisResult AnalysisForType(ResponseType responseType)
+        private static ResponsePlanner Planner()
         {
-            switch (responseType)
-            {
-                case ResponseType.Mirror:
-                    return Analysis(
-                        density: 0.55f,
-                        energy: 0.55f,
-                        anchorCount: 2,
-                        strongestAnchorScore: 0.8f,
-                        averageSupport: 0.8f);
-
-                case ResponseType.Complement:
-                    return Analysis(
-                        density: 0.6f,
-                        energy: 0.6f,
-                        anchorCount: 1,
-                        strongestAnchorScore: 0.6f,
-                        averageSupport: 0.5f);
-
-                case ResponseType.Simplify:
-                    return Analysis(
-                        density: 0.8f,
-                        energy: 0.8f,
-                        averageSupport: 0.5f);
-
-                case ResponseType.Intensify:
-                    return Analysis(
-                        density: 0.2f,
-                        energy: 0.55f,
-                        averageSupport: 0.5f);
-
-                case ResponseType.Contrast:
-                    return Analysis(
-                        density: 0.55f,
-                        energy: 0.55f,
-                        averageSupport: 0.5f,
-                        densityShape: ActivityShape.BackLoaded,
-                        energyShape: ActivityShape.BackLoaded);
-
-                case ResponseType.Fill:
-                    return Analysis(
-                        density: 0.55f,
-                        energy: 0.55f,
-                        averageSupport: 0.5f,
-                        endDensity: 0.75f,
-                        endEnergy: 0.8f,
-                        endAccent: 120);
-
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
-            }
+            return new ResponsePlanner();
         }
 
         private static TurnAnalysisResult Analysis(
@@ -317,7 +162,6 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
             int stepCount = 16,
             int anchorCount = 0,
             float strongestAnchorScore = 0f,
-            float averageSupport = 0.5f,
             float endDensity = 0f,
             float endEnergy = 0f,
             int endAccent = 0,
@@ -328,7 +172,6 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
                 Density(density, stepCount),
                 Energy(energy),
                 Anchor(anchorCount, strongestAnchorScore, stepCount),
-                AnchorSupport(averageSupport),
                 EndActivity(endDensity, endEnergy, endAccent),
                 new SegmentActivityProfileFeatures(densityShape, energyShape));
         }
@@ -392,21 +235,9 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
                 anchorsPerSegment);
         }
 
-        private static AnchorSupportFeatures AnchorSupport(float averageSupport)
-        {
-            return new AnchorSupportFeatures(
-                averageSupport,
-                0f,
-                0f,
-                0f);
-        }
-
         private static EndActivityFeatures EndActivity(float density, float energy, int accent)
         {
-            return new EndActivityFeatures(
-                density,
-                energy * 127f,
-                accent);
+            return new EndActivityFeatures(density, energy * 127f, accent);
         }
 
         private static IReadOnlyList<float> Segments(float value)
@@ -414,42 +245,14 @@ namespace IT4s.Rhythm.ResponsePlanning.Tests
             return new[] { value, value, value, value };
         }
 
-        private static void AssertPlanRange(ResponsePlan plan)
-        {
-            Assert.That(plan.TargetDensity, Is.InRange(0f, 1f));
-            Assert.That(plan.TargetEnergy, Is.InRange(0f, 1f));
-            Assert.That(plan.VariationAmount, Is.InRange(0f, 1f));
-            Assert.That(plan.SyncopationBias, Is.InRange(0f, 1f));
-            Assert.That(plan.ComplementarityBias, Is.InRange(0f, 1f));
-            Assert.That(plan.TurnLengthSteps, Is.GreaterThanOrEqualTo(1));
-        }
-
         private static void AssertPlansEqual(ResponsePlan expected, ResponsePlan actual)
         {
-            Assert.That(actual.Type, Is.EqualTo(expected.Type));
+            Assert.That(actual.ResponseType, Is.EqualTo(expected.ResponseType));
             Assert.That(actual.TargetDensity, Is.EqualTo(expected.TargetDensity).Within(0.0001f));
-            Assert.That(actual.TargetEnergy, Is.EqualTo(expected.TargetEnergy).Within(0.0001f));
+            Assert.That(actual.ComplementarityBias, Is.EqualTo(expected.ComplementarityBias).Within(0.0001f));
             Assert.That(actual.PreserveAnchors, Is.EqualTo(expected.PreserveAnchors));
             Assert.That(actual.MirrorEnding, Is.EqualTo(expected.MirrorEnding));
-            Assert.That(actual.VariationAmount, Is.EqualTo(expected.VariationAmount).Within(0.0001f));
-            Assert.That(actual.SyncopationBias, Is.EqualTo(expected.SyncopationBias).Within(0.0001f));
-            Assert.That(actual.ComplementarityBias, Is.EqualTo(expected.ComplementarityBias).Within(0.0001f));
             Assert.That(actual.TurnLengthSteps, Is.EqualTo(expected.TurnLengthSteps));
-        }
-
-        private sealed class ConstantRandomSource : IRandomSource
-        {
-            private readonly double sample;
-
-            public ConstantRandomSource(double sample)
-            {
-                this.sample = sample;
-            }
-
-            public double NextDouble()
-            {
-                return sample;
-            }
         }
     }
 }

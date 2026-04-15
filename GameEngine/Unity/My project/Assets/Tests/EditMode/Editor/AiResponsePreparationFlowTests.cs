@@ -148,12 +148,9 @@ namespace IT4s.Orchestration.Tests
             return new ResponsePlan(
                 responseType,
                 0.5f,
-                0.5f,
+                0.2f,
                 true,
                 true,
-                0.2f,
-                0.2f,
-                0.2f,
                 16);
         }
 
