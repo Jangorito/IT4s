@@ -10,6 +10,7 @@ namespace IT4s.Rhythm.ResponsePlanning
         private const float MaxVelocity = 127f;
         private const float ScoreEqualityEpsilon = 0.0001f;
         private readonly ResponsePlannerConfig config;
+        private Dictionary<ResponseType, float> lastScores = new Dictionary<ResponseType, float>();
 
         public ResponsePlanner()
             : this(new ResponsePlannerConfig())
@@ -21,14 +22,19 @@ namespace IT4s.Rhythm.ResponsePlanning
             this.config = config ?? throw new ArgumentNullException(nameof(config));
         }
 
+        public ResponsePlannerDebugSnapshot LastSnapshot { get; private set; }
+
         public ResponsePlan Plan(TurnAnalysisResult analysis)
         {
             if (analysis == null)
                 throw new ArgumentNullException(nameof(analysis));
 
+            LastSnapshot = null;
             PlanningContext context = BuildContext(analysis, config);
             ResponseType responseType = ChooseResponseType(context, config);
-            return DerivePlan(context, responseType, config);
+            ResponsePlan plan = DerivePlan(context, responseType, config);
+            LastSnapshot = CreateDebugSnapshot(context, responseType, plan, lastScores);
+            return plan;
         }
 
         private static PlanningContext BuildContext(TurnAnalysisResult analysis, ResponsePlannerConfig config)
@@ -88,16 +94,16 @@ namespace IT4s.Rhythm.ResponsePlanning
                 GetTurnLengthSteps(analysis));
         }
 
-        private static ResponseType ChooseResponseType(PlanningContext context, ResponsePlannerConfig config)
+        private ResponseType ChooseResponseType(PlanningContext context, ResponsePlannerConfig config)
         {
-            Dictionary<ResponseType, float> scores = ScoreResponseTypes(context, config);
-            float bestScore = GetBestScore(scores);
-            List<ResponseType> candidates = GetCloseScoreCandidates(scores, bestScore, config.ScoreTieMargin);
+            lastScores = ScoreResponseTypes(context, config);
+            float bestScore = GetBestScore(lastScores);
+            List<ResponseType> candidates = GetCloseScoreCandidates(lastScores, bestScore, config.ScoreTieMargin);
 
             if (candidates.Count == 1)
                 return candidates[0];
 
-            return ResolveCloseScoreTie(candidates, scores, context, config);
+            return ResolveCloseScoreTie(candidates, lastScores, context, config);
         }
 
         private ResponsePlan DerivePlan(PlanningContext context, ResponseType responseType, ResponsePlannerConfig config)
@@ -123,25 +129,50 @@ namespace IT4s.Rhythm.ResponsePlanning
 
         private float DeriveTargetDensity(PlanningContext context, ResponseType responseType, ResponsePlannerConfig config)
         {
-            float density = context.SourceDensity + GetDensityDelta(responseType) + GetDensityContextModifier(context, responseType);
+            float density = context.SourceDensity + GetDensityDelta(responseType);
+            density += GetDensityContextModifier(context, responseType, config);
+            density = ClampDensityChange(context.SourceDensity, density, config);
             return Clamp(density, config.MinTargetDensity, config.MaxTargetDensity);
         }
 
-        private float DeriveComplementarityBias(PlanningContext context, ResponseType responseType, ResponsePlannerConfig config)
+        private static float DeriveComplementarityBias(PlanningContext context, ResponseType responseType, ResponsePlannerConfig config)
         {
             float bias = GetBaselineComplementarityBias(responseType);
+            float adjustment = config.ComplementarityAdjustment;
 
-            if (context.IsCongested || context.HasConversationalSpace)
-                bias += config.ComplementarityAdjustment;
-
-            if (context.HasMeaningfulAnchors)
-                bias -= config.ComplementarityAdjustment;
-
-            if (responseType == ResponseType.Mirror && context.HasStrongEnding)
-                bias -= config.ComplementarityAdjustment;
-
-            if (responseType == ResponseType.Fill && context.EndingIsOpen)
-                bias += config.ComplementarityAdjustment * 0.5f;
+            switch (responseType)
+            {
+                case ResponseType.Mirror:
+                    if (context.HasMeaningfulAnchors) bias -= adjustment;
+                    if (context.HasStrongEnding) bias -= adjustment * 0.5f;
+                    if (context.HasConversationalSpace) bias += adjustment * 0.5f;
+                    break;
+                case ResponseType.Complement:
+                    if (context.HasConversationalSpace) bias += adjustment;
+                    if (context.HasMeaningfulAnchors) bias -= adjustment;
+                    if (context.HasStrongEnding) bias -= adjustment * 0.5f;
+                    break;
+                case ResponseType.Simplify:
+                    if (context.IsCongested) bias += adjustment;
+                    if (context.HasMeaningfulAnchors) bias -= adjustment;
+                    break;
+                case ResponseType.Intensify:
+                    if (context.HasConversationalSpace) bias += adjustment;
+                    if (context.EndingIsOpen) bias += adjustment * 0.5f;
+                    if (context.HasMeaningfulAnchors) bias -= adjustment;
+                    break;
+                case ResponseType.Contrast:
+                    if (context.IsPredictableProfile) bias += adjustment;
+                    if (context.HasMeaningfulAnchors) bias -= adjustment;
+                    break;
+                case ResponseType.Fill:
+                    if (context.HasConversationalSpace) bias += adjustment;
+                    if (context.EndingIsOpen) bias += adjustment * 0.5f;
+                    if (context.HasMeaningfulAnchors) bias -= adjustment;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
+            }
 
             return Clamp01(bias);
         }
@@ -154,15 +185,15 @@ namespace IT4s.Rhythm.ResponsePlanning
             switch (responseType)
             {
                 case ResponseType.Mirror:
+                    return true;
                 case ResponseType.Complement:
-                    return !context.IsCongested || responseType == ResponseType.Mirror;
+                    return !context.IsCongested;
                 case ResponseType.Simplify:
-                    return !context.IsCongested && context.HasStrongEnding;
+                    return !context.IsCongested && (context.HasStrongEnding || context.ActivityIsBalanced);
                 case ResponseType.Contrast:
                 case ResponseType.Intensify:
-                    return false;
                 case ResponseType.Fill:
-                    return context.HasStrongEnding && !context.EndingIsOpen;
+                    return false;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
             }
@@ -170,7 +201,9 @@ namespace IT4s.Rhythm.ResponsePlanning
 
         private static bool DeriveMirrorEnding(PlanningContext context, ResponseType responseType)
         {
-            return context.HasStrongEnding && responseType == ResponseType.Mirror;
+            return responseType == ResponseType.Mirror &&
+                context.HasStrongEnding &&
+                !context.EndingIsOpen;
         }
 
         private static Dictionary<ResponseType, float> ScoreResponseTypes(PlanningContext context, ResponsePlannerConfig config)
@@ -443,30 +476,161 @@ namespace IT4s.Rhythm.ResponsePlanning
             }
         }
 
-        private float GetDensityContextModifier(PlanningContext context, ResponseType responseType)
+        private static float GetDensityContextModifier(
+            PlanningContext context,
+            ResponseType responseType,
+            ResponsePlannerConfig config)
         {
             float adjustment = config.DensityContextAdjustment;
 
             switch (responseType)
             {
                 case ResponseType.Mirror:
-                    return context.IsHighEnergy && !context.IsBusy ? adjustment * 0.5f : 0f;
+                    if (context.IsBusy && context.IsHighEnergy) return -adjustment * 0.25f;
+                    if (context.IsSparse && !context.EndingIsOpen) return adjustment * 0.25f;
+                    return 0f;
                 case ResponseType.Complement:
-                    return context.IsCongested ? -adjustment * 0.5f : 0f;
+                    if (context.IsCongested) return -adjustment * 0.5f;
+                    if (context.IsSparse && context.HasConversationalSpace) return adjustment * 0.25f;
+                    return 0f;
                 case ResponseType.Simplify:
-                    if (context.IsBusy && context.IsHighEnergy) return -adjustment;
-                    return context.IsBusy ? -adjustment * 0.5f : 0f;
+                    float simplifyModifier = 0f;
+                    if (context.IsBusy) simplifyModifier -= adjustment * 0.5f;
+                    if (context.IsHighEnergy) simplifyModifier -= adjustment * 0.25f;
+                    if (context.IsCongested) simplifyModifier -= adjustment * 0.25f;
+                    if (context.HasMeaningfulAnchors && context.HasStrongEnding) simplifyModifier += adjustment * 0.25f;
+                    return simplifyModifier;
                 case ResponseType.Intensify:
-                    if (context.IsSparse && !context.HasStrongEnding) return adjustment * 0.5f;
-                    return context.HasStrongEnding ? -adjustment * 0.5f : 0f;
+                    float intensifyModifier = 0f;
+                    if (context.SourceDensity <= config.VerySparseDensityThreshold) intensifyModifier += adjustment;
+                    else if (context.IsSparse) intensifyModifier += adjustment * 0.5f;
+                    if (context.IsLowEnergy) intensifyModifier += adjustment * 0.25f;
+                    if (context.HasStrongEnding) intensifyModifier -= adjustment * 0.25f;
+                    return intensifyModifier;
                 case ResponseType.Contrast:
-                    return context.ActivityIsBackLoaded || context.ActivityIsFrontLoaded ? adjustment * 0.5f : 0f;
+                    if (context.IsSparse) return adjustment * 0.25f;
+                    if (context.IsBusy) return -adjustment * 0.25f;
+                    return 0f;
                 case ResponseType.Fill:
-                    if (context.EndingIsOpen || context.ActivityIsBackLoaded) return adjustment;
-                    return context.HasStrongEnding ? -adjustment * 0.5f : 0f;
+                    float fillModifier = 0f;
+                    if (context.EndingIsOpen) fillModifier += adjustment;
+                    else if (!context.HasStrongEnding) fillModifier += adjustment * 0.5f;
+                    if (context.ActivityIsBackLoaded) fillModifier += adjustment * 0.5f;
+                    return fillModifier;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
             }
+        }
+
+        private static float ClampDensityChange(
+            float sourceDensity,
+            float targetDensity,
+            ResponsePlannerConfig config)
+        {
+            return Clamp(
+                targetDensity,
+                sourceDensity - config.MaxTargetDensityDelta,
+                sourceDensity + config.MaxTargetDensityDelta);
+        }
+
+        private static ResponsePlannerDebugSnapshot CreateDebugSnapshot(
+            PlanningContext context,
+            ResponseType selectedResponseType,
+            ResponsePlan finalPlan,
+            IReadOnlyDictionary<ResponseType, float> scores)
+        {
+            return new ResponsePlannerDebugSnapshot(
+                CreateDescriptorSummary(context),
+                CreateNumericSummary(context),
+                CreateScoreSnapshot(scores),
+                selectedResponseType,
+                finalPlan);
+        }
+
+        private static ResponsePlannerDescriptorSummary CreateDescriptorSummary(PlanningContext context)
+        {
+            return new ResponsePlannerDescriptorSummary(
+                BuildDescriptorSummaryText(context),
+                context.IsSparse,
+                context.IsBalancedDensity,
+                context.IsBusy,
+                context.IsLowEnergy,
+                context.IsMediumEnergy,
+                context.IsHighEnergy,
+                context.HasMeaningfulAnchors,
+                context.HasStrongEnding,
+                context.EndingIsOpen,
+                context.ActivityIsBackLoaded,
+                context.ActivityIsFrontLoaded,
+                context.ActivityIsBalanced,
+                context.HasConversationalSpace,
+                context.IsPredictableProfile,
+                context.IsCongested);
+        }
+
+        private static ResponsePlannerNumericSummary CreateNumericSummary(PlanningContext context)
+        {
+            return new ResponsePlannerNumericSummary(
+                context.SourceDensity,
+                context.SourceEnergy,
+                context.AnchorCount,
+                context.TurnLengthSteps);
+        }
+
+        private static IReadOnlyList<ResponseTypeScore> CreateScoreSnapshot(IReadOnlyDictionary<ResponseType, float> scores)
+        {
+            ResponseType[] responseTypes =
+            {
+                ResponseType.Mirror,
+                ResponseType.Complement,
+                ResponseType.Simplify,
+                ResponseType.Intensify,
+                ResponseType.Contrast,
+                ResponseType.Fill
+            };
+
+            var snapshot = new ResponseTypeScore[responseTypes.Length];
+            for (int i = 0; i < responseTypes.Length; i++)
+            {
+                ResponseType responseType = responseTypes[i];
+                snapshot[i] = new ResponseTypeScore(responseType, GetScore(scores, responseType));
+            }
+
+            return Array.AsReadOnly(snapshot);
+        }
+
+        private static string BuildDescriptorSummaryText(PlanningContext context)
+        {
+            var descriptors = new List<string>(8);
+
+            if (context.IsSparse) descriptors.Add("Sparse");
+            else if (context.IsBusy) descriptors.Add("Busy");
+            else descriptors.Add("BalancedDensity");
+
+            if (context.IsLowEnergy) descriptors.Add("LowEnergy");
+            else if (context.IsHighEnergy) descriptors.Add("HighEnergy");
+            else descriptors.Add("MediumEnergy");
+
+            if (context.HasMeaningfulAnchors) descriptors.Add("MeaningfulAnchors");
+            if (context.HasStrongEnding) descriptors.Add("StrongEnding");
+            else if (context.EndingIsOpen) descriptors.Add("OpenEnding");
+            if (context.HasConversationalSpace) descriptors.Add("ConversationalSpace");
+            if (context.ActivityIsBackLoaded) descriptors.Add("BackLoaded");
+            else if (context.ActivityIsFrontLoaded) descriptors.Add("FrontLoaded");
+            else if (context.ActivityIsBalanced) descriptors.Add("BalancedProfile");
+            if (context.IsPredictableProfile) descriptors.Add("PredictableProfile");
+            if (context.IsCongested) descriptors.Add("Congested");
+
+            return descriptors.Count == 0
+                ? "Neutral"
+                : string.Join(", ", descriptors);
+        }
+
+        private static float GetScore(IReadOnlyDictionary<ResponseType, float> scores, ResponseType responseType)
+        {
+            return scores != null && scores.TryGetValue(responseType, out float score)
+                ? score
+                : 0f;
         }
 
         private static bool HasLateBias(ActivityShape shape)

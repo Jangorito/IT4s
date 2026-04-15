@@ -3,6 +3,7 @@ namespace IT4s.Rhythm.ResponsePlanning
     public sealed class ResponsePlannerConfig
     {
         public float SparseDensityThreshold { get; set; } = 0.35f;
+        public float VerySparseDensityThreshold { get; set; } = 0.20f;
         public float BusyDensityThreshold { get; set; } = 0.70f;
         public float ConversationalSpaceDensityThreshold { get; set; } = 0.60f;
         public float CongestedDensityThreshold { get; set; } = 0.75f;
@@ -23,6 +24,7 @@ namespace IT4s.Rhythm.ResponsePlanning
 
         public float MinTargetDensity { get; set; } = 0.10f;
         public float MaxTargetDensity { get; set; } = 0.80f;
+        public float MaxTargetDensityDelta { get; set; } = 0.22f;
 
         public float DensityPrimaryScore { get; set; } = 2.5f;
         public float EnergyPrimaryScore { get; set; } = 2.0f;
