@@ -62,7 +62,8 @@ namespace IT4s.Orchestration
     /// This controller remains the conductor: it owns phases, lifecycle glue, dependency
     /// validation, observable state publication, error transitions, and playback triggering.
     /// Concrete human capture coordination and synchronous AI preparation are extracted into
-    /// focused plain C# collaborators, while playback coordination still stays here for now.
+    /// focused plain C# collaborators, while a small passive runtime-state helper keeps the
+    /// controller readable without taking over orchestration ownership.
     /// </summary>
     public class TurnLoopController : MonoBehaviour
     {
@@ -111,35 +112,23 @@ namespace IT4s.Orchestration
         // without needing extra domain phases before they are truly justified.
         private bool isRunning;
 
-        private HitEvent lastTriggerHit;
-        private bool hasLastTriggerHit;
-        private long startSamples = -1;
-        private long endSamples = -1;
-        private TurnWindow lastTurnWindow;
-        private bool hasLastTurnWindow;
-        private PatternTurn lastCompiledPatternTurn;
-        private bool hasLastCompiledPatternTurn;
-        private TurnAnalysisResult lastAnalysisResult;
-        private bool hasLastAnalysisResult;
-        private ResponsePlan currentResponsePlan;
-        private bool hasCurrentResponsePlan;
-        private PatternTurn lastGeneratedAiPatternTurn;
-        private bool hasLastGeneratedAiPatternTurn;
-        private bool captureClockWarningIssued;
+        // RuntimeState is a passive backing store that reduces field clutter. It does not own
+        // transitions, events, or orchestration decisions; TurnLoopController still does.
+        private readonly TurnLoopRuntimeState runtimeState = new TurnLoopRuntimeState();
         private OscHitReceiver subscribedHitReceiver;
 
         // Events provide observability without forcing UI or debug tools to poll the controller.
         // They also make the orchestration layer easier to test because state changes are explicit.
-        public TurnWindow LastTurnWindow => lastTurnWindow;
-        public bool HasLastTurnWindow => hasLastTurnWindow;
-        public PatternTurn LastCompiledPatternTurn => lastCompiledPatternTurn;
-        public bool HasLastCompiledPatternTurn => hasLastCompiledPatternTurn;
-        public TurnAnalysisResult LastAnalysisResult => lastAnalysisResult;
-        public bool HasLastAnalysisResult => hasLastAnalysisResult;
-        public ResponsePlan CurrentResponsePlan => currentResponsePlan;
-        public bool HasCurrentResponsePlan => hasCurrentResponsePlan;
-        public PatternTurn LastGeneratedAiPatternTurn => lastGeneratedAiPatternTurn;
-        public bool HasLastGeneratedAiPatternTurn => hasLastGeneratedAiPatternTurn;
+        public TurnWindow LastTurnWindow => runtimeState.LastTurnWindow;
+        public bool HasLastTurnWindow => runtimeState.HasLastTurnWindow;
+        public PatternTurn LastCompiledPatternTurn => runtimeState.LastCompiledPatternTurn;
+        public bool HasLastCompiledPatternTurn => runtimeState.HasLastCompiledPatternTurn;
+        public TurnAnalysisResult LastAnalysisResult => runtimeState.LastAnalysisResult;
+        public bool HasLastAnalysisResult => runtimeState.HasLastAnalysisResult;
+        public ResponsePlan CurrentResponsePlan => runtimeState.CurrentResponsePlan;
+        public bool HasCurrentResponsePlan => runtimeState.HasCurrentResponsePlan;
+        public PatternTurn LastGeneratedAiPatternTurn => runtimeState.LastGeneratedAiPatternTurn;
+        public bool HasLastGeneratedAiPatternTurn => runtimeState.HasLastGeneratedAiPatternTurn;
         public event Action<TurnPhase> OnPhaseChanged;
         public event Action<TurnWindow> OnHumanTurnCaptured;
         public event Action<PatternTurn> OnHumanPatternCompiled;
@@ -556,16 +545,12 @@ namespace IT4s.Orchestration
                     return;
 
                 case HumanTurnCaptureFlow.StartStatus.Started:
-                    lastTriggerHit = triggerHit;
-                    hasLastTriggerHit = true;
-                    startSamples = triggerHit.tSamples;
-                    endSamples = scheduledEndSamples;
-                    captureClockWarningIssued = false;
+                    runtimeState.RecordCaptureStart(triggerHit, scheduledEndSamples);
                     ClearAnalysisAndPlanningRuntimeState();
 
-                    EmitDebugMessage($"Human turn started at sample {startSamples}.");
+                    EmitDebugMessage($"Human turn started at sample {runtimeState.CaptureStartSamples}.");
                     EmitDebugMessage(
-                        $"Human turn scheduled to end at sample {endSamples} " +
+                        $"Human turn scheduled to end at sample {runtimeState.CaptureEndSamples} " +
                         $"(duration={turnDurationSamples} samples, {currentMusicalTiming.barsPerTurn} bars at {currentMusicalTiming.bpm} bpm).");
                     SetPhase(TurnPhase.CapturingHuman);
                     return;
@@ -575,7 +560,11 @@ namespace IT4s.Orchestration
         private void TickCapturingHuman()
         {
             HumanTurnCaptureFlow.TickStatus tickStatus =
-                CreateHumanTurnCaptureFlow().TickCapture(startSamples, endSamples, out TurnWindow turnWindow, out string errorReason);
+                CreateHumanTurnCaptureFlow().TickCapture(
+                    runtimeState.CaptureStartSamples,
+                    runtimeState.CaptureEndSamples,
+                    out TurnWindow turnWindow,
+                    out string errorReason);
 
             switch (tickStatus)
             {
@@ -584,20 +573,20 @@ namespace IT4s.Orchestration
                     return;
 
                 case HumanTurnCaptureFlow.TickStatus.WaitingForClock:
-                    if (!captureClockWarningIssued)
+                    if (!runtimeState.CaptureClockWarningIssued)
                     {
                         Debug.LogWarning("[TurnLoopController] Capture phase is waiting for a valid sample clock from OscHitReceiver.");
-                        captureClockWarningIssued = true;
+                        runtimeState.CaptureClockWarningIssued = true;
                     }
 
                     return;
 
                 case HumanTurnCaptureFlow.TickStatus.WaitingForEnd:
-                    captureClockWarningIssued = false;
+                    runtimeState.CaptureClockWarningIssued = false;
                     return;
 
                 case HumanTurnCaptureFlow.TickStatus.Completed:
-                    captureClockWarningIssued = false;
+                    runtimeState.CaptureClockWarningIssued = false;
                     StoreCapturedTurnWindow(turnWindow);
 
                     EmitDebugMessage(
@@ -717,10 +706,7 @@ namespace IT4s.Orchestration
 
         private void ClearCaptureRuntimeState()
         {
-            hasLastTriggerHit = false;
-            startSamples = -1;
-            endSamples = -1;
-            captureClockWarningIssued = false;
+            runtimeState.ClearCaptureRuntimeState();
         }
 
         private void ClearGeneratedAiResponseState()
@@ -746,8 +732,7 @@ namespace IT4s.Orchestration
                 return;
             }
 
-            lastAnalysisResult = null;
-            hasLastAnalysisResult = false;
+            runtimeState.ClearAnalysisResultState();
         }
 
         private void ClearResponsePlanState()
@@ -757,28 +742,24 @@ namespace IT4s.Orchestration
                 return;
             }
 
-            currentResponsePlan = null;
-            hasCurrentResponsePlan = false;
+            runtimeState.ClearResponsePlanState();
         }
 
         private void StoreCapturedTurnWindow(TurnWindow turnWindow)
         {
-            lastTurnWindow = turnWindow;
-            hasLastTurnWindow = true;
+            runtimeState.SetLastTurnWindow(turnWindow);
             OnHumanTurnCaptured?.Invoke(turnWindow);
         }
 
         private void StoreCompiledHumanPattern(PatternTurn pattern)
         {
-            lastCompiledPatternTurn = pattern;
-            hasLastCompiledPatternTurn = pattern != null;
+            runtimeState.SetLastCompiledPatternTurn(pattern);
             OnHumanPatternCompiled?.Invoke(pattern);
         }
 
         private void StoreAnalysisResult(TurnAnalysisResult analysis)
         {
-            lastAnalysisResult = analysis;
-            hasLastAnalysisResult = analysis != null;
+            runtimeState.SetLastAnalysisResult(analysis);
 
             if (analysis != null)
             {
@@ -788,8 +769,7 @@ namespace IT4s.Orchestration
 
         private void StoreResponsePlan(ResponsePlan plan)
         {
-            currentResponsePlan = plan;
-            hasCurrentResponsePlan = plan != null;
+            runtimeState.SetCurrentResponsePlan(plan);
 
             if (plan != null)
             {
@@ -799,8 +779,7 @@ namespace IT4s.Orchestration
 
         private void StoreGeneratedAiPattern(PatternTurn pattern)
         {
-            lastGeneratedAiPatternTurn = pattern;
-            hasLastGeneratedAiPatternTurn = pattern != null;
+            runtimeState.SetLastGeneratedAiPatternTurn(pattern);
             OnAiPatternGenerated?.Invoke(pattern);
         }
 
