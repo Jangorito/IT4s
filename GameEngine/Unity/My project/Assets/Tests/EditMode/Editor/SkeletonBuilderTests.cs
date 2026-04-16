@@ -90,17 +90,19 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             Assert.That(pattern.SelectionScores, Has.Length.EqualTo(48));
             Assert.That(pattern.StepMeta, Has.Length.EqualTo(48));
             Assert.That(pattern.SelectedStepIndices, Is.Empty);
+            Assert.That(pattern.SelectionScores[0], Is.Not.EqualTo(0f));
 
             for (int i = 0; i < pattern.TurnLengthSteps; i++)
             {
                 Assert.That(pattern.ActiveSteps[i], Is.False, "Active flag at step {0}", i);
-                Assert.That(pattern.SelectionScores[i], Is.EqualTo(0f), "Selection score at step {0}", i);
+                Assert.That(pattern.SelectionScores[i], Is.EqualTo(pattern.StepMeta[i].FinalScore), "Selection score at step {0}", i);
                 Assert.That(pattern.StepMeta[i].StepIndex, Is.EqualTo(i), "Step index at {0}", i);
                 Assert.That(pattern.StepMeta[i].SegmentIndex, Is.InRange(0, 3), "Segment index at step {0}", i);
                 Assert.That(pattern.StepMeta[i].StepsFromEnd, Is.EqualTo(pattern.TurnLengthSteps - 1 - i), "Steps from end at step {0}", i);
                 Assert.That(pattern.StepMeta[i].IsStrongBeat, Is.EqualTo(i % 12 == 0), "Strong beat flag at step {0}", i);
                 Assert.That(pattern.StepMeta[i].Selected, Is.False, "Selected flag at step {0}", i);
-                Assert.That(pattern.StepMeta[i].FinalScore, Is.EqualTo(0f), "Final score at step {0}", i);
+                Assert.That(pattern.StepMeta[i].SpacingPenalty, Is.EqualTo(0f), "Spacing penalty at step {0}", i);
+                Assert.That(pattern.StepMeta[i].RawScore, Is.EqualTo(pattern.StepMeta[i].FinalScore), "Raw/final score at step {0}", i);
             }
 
             Assert.That(pattern.Summary.ActiveCount, Is.EqualTo(0));
@@ -394,6 +396,154 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
                 Assert.That(pattern.StepMeta[i].SegmentIndex, Is.InRange(0, 3), "Segment index at step {0}", i);
         }
 
+        [Test]
+        public void BuildSkeleton_RawScores_PreserveMetricDominanceUnderLowDensity()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonPattern pattern = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                plan: Plan(48, targetDensity: 0.10f),
+                config: MetricFocusedConfig()));
+
+            Assert.That(pattern.StepMeta[0].FinalScore, Is.GreaterThan(pattern.StepMeta[6].FinalScore));
+            Assert.That(pattern.StepMeta[6].FinalScore, Is.GreaterThan(pattern.StepMeta[3].FinalScore));
+            Assert.That(pattern.StepMeta[3].FinalScore, Is.GreaterThan(pattern.StepMeta[1].FinalScore));
+            Assert.That(pattern.StepMeta[0].FinalScore, Is.GreaterThan(pattern.StepMeta[1].FinalScore));
+        }
+
+        [Test]
+        public void BuildSkeleton_MirrorSourceRelation_RewardsSourceOccupiedComparableStep()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonPattern pattern = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                sourceVelocities: Velocities(16, 0),
+                plan: Plan(16, responseType: ResponseType.Mirror, complementarityBias: 0f),
+                config: NoJitterConfig()));
+
+            Assert.That(pattern.StepMeta[0].IsStrongBeat, Is.True);
+            Assert.That(pattern.StepMeta[4].IsStrongBeat, Is.True);
+            Assert.That(pattern.StepMeta[0].SourceRelationScore, Is.GreaterThan(pattern.StepMeta[4].SourceRelationScore));
+            Assert.That(pattern.StepMeta[0].FinalScore, Is.GreaterThan(pattern.StepMeta[4].FinalScore));
+        }
+
+        [Test]
+        public void BuildSkeleton_ComplementSourceRelation_RewardsComparableGapStep()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonPattern pattern = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                sourceVelocities: Velocities(16, 0),
+                plan: Plan(16, responseType: ResponseType.Complement, complementarityBias: 1f),
+                config: NoJitterConfig()));
+
+            Assert.That(pattern.StepMeta[0].IsStrongBeat, Is.True);
+            Assert.That(pattern.StepMeta[4].IsStrongBeat, Is.True);
+            Assert.That(pattern.StepMeta[4].SourceRelationScore, Is.GreaterThan(pattern.StepMeta[0].SourceRelationScore));
+            Assert.That(pattern.StepMeta[4].FinalScore, Is.GreaterThan(pattern.StepMeta[0].FinalScore));
+        }
+
+        [Test]
+        public void BuildSkeleton_PreserveAnchors_BoostsAnchorScoreWhenEnabled()
+        {
+            var builder = new SkeletonBuilder();
+            TurnAnalysisResult analysis = Analysis(ExplicitAnchorFlagsOnly(16, 4));
+
+            SkeletonPattern unprotected = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                plan: Plan(16, preserveAnchors: false),
+                sourceAnalysis: analysis,
+                config: NoJitterConfig()));
+
+            SkeletonPattern protectedPattern = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                plan: Plan(16, preserveAnchors: true),
+                sourceAnalysis: analysis,
+                config: NoJitterConfig()));
+
+            Assert.That(unprotected.StepMeta[4].AnchorScore, Is.EqualTo(0f));
+            Assert.That(protectedPattern.StepMeta[4].AnchorScore, Is.GreaterThan(0f));
+            Assert.That(protectedPattern.StepMeta[4].FinalScore, Is.GreaterThan(unprotected.StepMeta[4].FinalScore));
+        }
+
+        [Test]
+        public void BuildSkeleton_EndingInfluence_AffectsOnlyEndingRegion()
+        {
+            var builder = new SkeletonBuilder();
+
+            SkeletonPattern noEnding = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                plan: Plan(16, responseType: ResponseType.Intensify),
+                config: NoEndingConfig()));
+
+            SkeletonPattern withEnding = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                plan: Plan(16, responseType: ResponseType.Intensify),
+                config: NoJitterConfig()));
+
+            Assert.That(withEnding.StepMeta[12].InEndingRegion, Is.True);
+            Assert.That(withEnding.StepMeta[8].InEndingRegion, Is.False);
+            Assert.That(withEnding.StepMeta[12].EndingScore, Is.GreaterThan(0f));
+            Assert.That(withEnding.StepMeta[12].FinalScore, Is.GreaterThan(noEnding.StepMeta[12].FinalScore));
+            Assert.That(withEnding.StepMeta[8].EndingScore, Is.EqualTo(0f));
+            Assert.That(withEnding.StepMeta[8].FinalScore, Is.EqualTo(noEnding.StepMeta[8].FinalScore));
+        }
+
+        [Test]
+        public void BuildSkeleton_DensityShaping_SharpensLowDensityAndLiftsWeakHighDensity()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonBuilderConfig config = MetricFocusedConfig();
+
+            SkeletonPattern lowDensity = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                plan: Plan(48, targetDensity: 0.10f),
+                config: config));
+
+            SkeletonPattern highDensity = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                plan: Plan(48, targetDensity: 0.90f),
+                config: config));
+
+            Assert.That(lowDensity.StepMeta[0].DensityShapingScore, Is.GreaterThan(lowDensity.StepMeta[1].DensityShapingScore));
+            Assert.That(highDensity.StepMeta[1].DensityShapingScore, Is.GreaterThan(0f));
+            Assert.That(highDensity.StepMeta[3].DensityShapingScore, Is.GreaterThan(0f));
+            Assert.That(highDensity.StepMeta[1].DensityShapingScore, Is.LessThan(0.10f));
+            Assert.That(highDensity.StepMeta[0].FinalScore, Is.GreaterThan(highDensity.StepMeta[1].FinalScore));
+        }
+
+        [Test]
+        public void BuildSkeleton_ZeroJitter_ProducesIdenticalSelectionScores()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonBuildRequest request = Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                plan: Plan(48, responseType: ResponseType.Fill, targetDensity: 0.70f, complementarityBias: 0.75f),
+                sourceVelocities: Velocities(48, 0, 7, 12, 31),
+                sourceAnalysis: Analysis(ExplicitAnchorFlagsOnly(48, 12, 36)),
+                config: NoJitterConfig());
+
+            SkeletonPattern first = builder.BuildSkeleton(request);
+            SkeletonPattern second = builder.BuildSkeleton(request);
+
+            for (int i = 0; i < request.TurnLengthSteps; i++)
+            {
+                Assert.That(second.SelectionScores[i], Is.EqualTo(first.SelectionScores[i]), "Selection score at step {0}", i);
+                Assert.That(second.StepMeta[i].FinalScore, Is.EqualTo(first.StepMeta[i].FinalScore), "Final score at step {0}", i);
+                Assert.That(second.StepMeta[i].JitterOffset, Is.EqualTo(0f), "Jitter at step {0}", i);
+            }
+        }
+
         private static SkeletonBuildRequest Request(
             int turnLengthSteps = 48,
             int stepsPerQuarter = 12,
@@ -417,15 +567,51 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             };
         }
 
-        private static ResponsePlan Plan(int turnLengthSteps, bool preserveAnchors = false)
+        private static ResponsePlan Plan(
+            int turnLengthSteps,
+            ResponseType responseType = ResponseType.Mirror,
+            float targetDensity = 0.50f,
+            float complementarityBias = 0.25f,
+            bool preserveAnchors = false,
+            bool mirrorEnding = false)
         {
             return new ResponsePlan(
-                ResponseType.Mirror,
-                targetDensity: 0.50f,
-                complementarityBias: 0.25f,
+                responseType,
+                targetDensity: targetDensity,
+                complementarityBias: complementarityBias,
                 preserveAnchors: preserveAnchors,
-                mirrorEnding: false,
+                mirrorEnding: mirrorEnding,
                 turnLengthSteps: turnLengthSteps);
+        }
+
+        private static SkeletonBuilderConfig NoJitterConfig()
+        {
+            return new SkeletonBuilderConfig
+            {
+                SelectionJitter = 0f
+            };
+        }
+
+        private static SkeletonBuilderConfig MetricFocusedConfig()
+        {
+            return new SkeletonBuilderConfig
+            {
+                MirrorWeight = 0f,
+                ComplementWeight = 0f,
+                AnchorInfluenceWeight = 0f,
+                EndingInfluenceWeight = 0f,
+                SelectionJitter = 0f,
+                RebalanceAcrossSegments = false
+            };
+        }
+
+        private static SkeletonBuilderConfig NoEndingConfig()
+        {
+            return new SkeletonBuilderConfig
+            {
+                EndingInfluenceWeight = 0f,
+                SelectionJitter = 0f
+            };
         }
 
         private static TurnAnalysisResult Analysis(AnchorFeatures anchor = null)

@@ -13,8 +13,11 @@ namespace IT4s.Rhythm.Generation.Skeleton.Models
         public float SourceRelationScore { get; set; }
         public float AnchorScore { get; set; }
         public float EndingScore { get; set; }
+        public float PhraseBalanceScore { get; set; }
+        public float DensityShapingScore { get; set; }
         public float SpacingPenalty { get; set; }
         public float JitterOffset { get; set; }
+        public float RawScore { get; set; }
         public float FinalScore { get; set; }
         public bool Selected { get; set; }
         public bool SourceOccupied { get; set; }

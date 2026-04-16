@@ -1,11 +1,17 @@
 using System;
 using IT4s.Rhythm.Generation.Skeleton.Models;
+using IT4s.Rhythm.ResponsePlanning.Models;
 
 namespace IT4s.Rhythm.Generation.Skeleton
 {
     public sealed class SkeletonBuilder : ISkeletonBuilder
     {
         private const float MetricWeakThreshold = 0.35f;
+        private const float SourceRelationScale = 0.35f;
+        private const float AnchorExplicitScale = 0.45f;
+        private const float AnchorFallbackScale = 0.32f;
+        private const float EndingScale = 0.28f;
+        private const float MaximumJitter = 0.05f;
 
         public SkeletonPattern BuildSkeleton(SkeletonBuildRequest request)
         {
@@ -18,8 +24,8 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 request.StepsPerQuarter);
 
             var activeSteps = new bool[request.TurnLengthSteps];
-            var selectionScores = new float[request.TurnLengthSteps];
             SkeletonStepMeta[] stepMeta = BuildStepMeta(request, maps);
+            float[] selectionScores = BuildSelectionScores(stepMeta);
             int[] selectedStepIndices = new int[0];
             SkeletonPatternSummary summary = CreateEmptySummary(request);
 
@@ -42,6 +48,49 @@ namespace IT4s.Rhythm.Generation.Skeleton
             {
                 bool sourceAnchor = maps.SourceAnchors[i];
                 bool protectedAnchor = request.Plan.PreserveAnchors && sourceAnchor;
+                float metricScore = ScoreMetric(request.Config, maps.MetricalSalience[i], maps.StrongBeats[i]);
+                float sourceRelationScore = ScoreSourceRelation(
+                    request.Plan,
+                    request.Config,
+                    maps.SourceOccupied[i],
+                    sourceAnchor,
+                    maps.MetricalSalience[i],
+                    maps.StrongBeats[i]);
+                float anchorScore = ScoreAnchor(
+                    request.Plan,
+                    request.Config,
+                    sourceAnchor,
+                    maps.ExplicitAnchors[i]);
+                float endingScore = ScoreEnding(
+                    request.Plan,
+                    request.Config,
+                    maps.EndingRegion[i],
+                    maps.StepsFromEnd[i],
+                    request.StepsPerQuarter,
+                    maps.SourceOccupied[i],
+                    maps.MetricalSalience[i],
+                    maps.StrongBeats[i]);
+                float phraseBalanceScore = ScorePhraseBalance(
+                    request.Config,
+                    maps.StepToSegment[i]);
+                float densityShapingScore = ScoreDensityShaping(
+                    request.Plan,
+                    maps.MetricStrengthLevels[i]);
+                float spacingPenalty = 0f;
+                float jitterOffset = ScoreJitter(
+                    request.Plan,
+                    request.Config,
+                    i,
+                    request.TurnLengthSteps);
+                float rawScore = SanitizeScore(
+                    metricScore +
+                    sourceRelationScore +
+                    anchorScore +
+                    endingScore +
+                    phraseBalanceScore +
+                    densityShapingScore +
+                    jitterOffset);
+                float finalScore = SanitizeScore(rawScore - spacingPenalty);
 
                 SkeletonReasonFlags reasonFlags = SkeletonReasonFlags.None;
                 if (maps.StrongBeats[i])
@@ -52,19 +101,42 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 if (protectedAnchor)
                     reasonFlags |= SkeletonReasonFlags.ProtectedAnchor;
 
+                if (sourceRelationScore > 0f)
+                {
+                    if (request.Plan.ResponseType == ResponseType.Complement ||
+                        request.Plan.ResponseType == ResponseType.Contrast ||
+                        request.Plan.ResponseType == ResponseType.Fill)
+                    {
+                        reasonFlags |= SkeletonReasonFlags.ComplementBoosted;
+                    }
+                    else if (request.Plan.ResponseType == ResponseType.Mirror)
+                    {
+                        reasonFlags |= SkeletonReasonFlags.MirrorBoosted;
+                    }
+                }
+
+                if (anchorScore > 0f)
+                    reasonFlags |= SkeletonReasonFlags.AnchorBoosted;
+
+                if (endingScore > 0f)
+                    reasonFlags |= SkeletonReasonFlags.EndingBoosted;
+
                 stepMeta[i] = new SkeletonStepMeta
                 {
                     StepIndex = i,
                     SegmentIndex = maps.StepToSegment[i],
                     IsStrongBeat = maps.StrongBeats[i],
                     StepsFromEnd = maps.StepsFromEnd[i],
-                    MetricScore = maps.MetricalSalience[i],
-                    SourceRelationScore = 0f,
-                    AnchorScore = 0f,
-                    EndingScore = 0f,
-                    SpacingPenalty = 0f,
-                    JitterOffset = 0f,
-                    FinalScore = 0f,
+                    MetricScore = metricScore,
+                    SourceRelationScore = sourceRelationScore,
+                    AnchorScore = anchorScore,
+                    EndingScore = endingScore,
+                    PhraseBalanceScore = phraseBalanceScore,
+                    DensityShapingScore = densityShapingScore,
+                    SpacingPenalty = spacingPenalty,
+                    JitterOffset = jitterOffset,
+                    RawScore = rawScore,
+                    FinalScore = finalScore,
                     Selected = false,
                     SourceOccupied = maps.SourceOccupied[i],
                     SourceAnchor = sourceAnchor,
@@ -77,6 +149,228 @@ namespace IT4s.Rhythm.Generation.Skeleton
             }
 
             return stepMeta;
+        }
+
+        private static float[] BuildSelectionScores(SkeletonStepMeta[] stepMeta)
+        {
+            var selectionScores = new float[stepMeta.Length];
+            for (int i = 0; i < stepMeta.Length; i++)
+                selectionScores[i] = stepMeta[i].FinalScore;
+
+            return selectionScores;
+        }
+
+        private static float ScoreMetric(SkeletonBuilderConfig config, float metricSalience, bool isStrongBeat)
+        {
+            return SanitizeScore(
+                config.MetricStrengthWeight * metricSalience +
+                (isStrongBeat ? config.StrongBeatPreferenceWeight : 0f));
+        }
+
+        private static float ScoreSourceRelation(
+            ResponsePlan plan,
+            SkeletonBuilderConfig config,
+            bool sourceOccupied,
+            bool sourceAnchor,
+            float metricSalience,
+            bool isStrongBeat)
+        {
+            float complementarity = Clamp01(plan.ComplementarityBias);
+            bool sourceRelated = sourceOccupied || sourceAnchor;
+
+            switch (plan.ResponseType)
+            {
+                case ResponseType.Mirror:
+                    return config.MirrorWeight * SourceRelationScale *
+                        (sourceOccupied ? 1f : (sourceAnchor ? 0.65f : -0.10f * complementarity));
+
+                case ResponseType.Complement:
+                    return config.ComplementWeight * SourceRelationScale *
+                        (sourceOccupied ? (-0.30f - 0.20f * complementarity) : (0.80f + 0.20f * complementarity));
+
+                case ResponseType.Simplify:
+                    return config.MirrorWeight * SourceRelationScale *
+                        (sourceRelated ? 0.45f : 0.10f * complementarity);
+
+                case ResponseType.Intensify:
+                    return SourceRelationScale *
+                        (sourceRelated
+                            ? config.MirrorWeight * 0.70f
+                            : config.ComplementWeight * (0.25f + 0.25f * complementarity));
+
+                case ResponseType.Contrast:
+                    return config.ComplementWeight * SourceRelationScale *
+                        (sourceOccupied ? -0.35f : (0.55f + 0.25f * complementarity));
+
+                case ResponseType.Fill:
+                    float interstitialSupport = isStrongBeat ? 0.20f : 0.55f + (1f - metricSalience) * 0.25f;
+                    return config.ComplementWeight * SourceRelationScale *
+                        (sourceOccupied ? -0.15f : interstitialSupport + complementarity * 0.20f);
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(plan.ResponseType), plan.ResponseType, "Unknown response type.");
+            }
+        }
+
+        private static float ScoreAnchor(
+            ResponsePlan plan,
+            SkeletonBuilderConfig config,
+            bool sourceAnchor,
+            bool isExplicitAnchor)
+        {
+            if (!plan.PreserveAnchors || !sourceAnchor)
+                return 0f;
+
+            float anchorScale = isExplicitAnchor ? AnchorExplicitScale : AnchorFallbackScale;
+
+            return SanitizeScore(config.AnchorInfluenceWeight * anchorScale);
+        }
+
+        private static float ScoreEnding(
+            ResponsePlan plan,
+            SkeletonBuilderConfig config,
+            bool inEndingRegion,
+            int stepsFromEnd,
+            int stepsPerQuarter,
+            bool sourceOccupied,
+            float metricSalience,
+            bool isStrongBeat)
+        {
+            if (!inEndingRegion)
+                return 0f;
+
+            float proximity = GetEndingProximity(stepsFromEnd, stepsPerQuarter);
+            float lateWeight = 0.35f + proximity * 0.65f;
+            float strongFactor = isStrongBeat ? 1f : (metricSalience >= 0.50f ? 0.45f : 0f);
+            float finalAccent = stepsFromEnd == 0 ? 1f : 0f;
+            float directionalScore;
+
+            if (plan.MirrorEnding)
+            {
+                directionalScore = (sourceOccupied ? 0.75f : 0.20f) * lateWeight;
+                if (isStrongBeat)
+                    directionalScore += 0.20f * lateWeight;
+
+                return SanitizeScore(config.EndingInfluenceWeight * EndingScale * directionalScore);
+            }
+
+            switch (plan.ResponseType)
+            {
+                case ResponseType.Mirror:
+                    directionalScore = (sourceOccupied ? 0.55f : 0.15f) * lateWeight;
+                    break;
+
+                case ResponseType.Complement:
+                    directionalScore = (sourceOccupied ? -0.20f : 0.45f + (1f - metricSalience) * 0.20f) * lateWeight;
+                    break;
+
+                case ResponseType.Simplify:
+                    directionalScore = (strongFactor - (metricSalience < 0.50f ? 0.35f : 0f)) * lateWeight;
+                    break;
+
+                case ResponseType.Intensify:
+                    directionalScore = (strongFactor + finalAccent * 0.35f) * lateWeight;
+                    break;
+
+                case ResponseType.Contrast:
+                    directionalScore = (finalAccent > 0f ? -0.60f : 0.20f + (1f - metricSalience) * 0.25f) * lateWeight;
+                    break;
+
+                case ResponseType.Fill:
+                    directionalScore = (isStrongBeat ? 0.15f : 0.55f + (1f - metricSalience) * 0.25f) * lateWeight;
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(plan.ResponseType), plan.ResponseType, "Unknown response type.");
+            }
+
+            return SanitizeScore(config.EndingInfluenceWeight * EndingScale * directionalScore);
+        }
+
+        private static float ScorePhraseBalance(SkeletonBuilderConfig config, int segmentIndex)
+        {
+            if (!config.RebalanceAcrossSegments)
+                return 0f;
+
+            switch (segmentIndex)
+            {
+                case 1:
+                case 2:
+                    return 0.03f;
+                case 3:
+                    return 0.015f;
+                default:
+                    return 0f;
+            }
+        }
+
+        private static float ScoreDensityShaping(ResponsePlan plan, MetricStrengthLevel strengthLevel)
+        {
+            float targetDensity = Clamp01(plan.TargetDensity);
+
+            if (targetDensity < 0.35f)
+            {
+                float lowAmount = (0.35f - targetDensity) / 0.35f;
+                switch (strengthLevel)
+                {
+                    case MetricStrengthLevel.Strongest: return 0.10f * lowAmount;
+                    case MetricStrengthLevel.Strong: return 0.04f * lowAmount;
+                    case MetricStrengthLevel.Medium: return 0f;
+                    case MetricStrengthLevel.Weak: return -0.04f * lowAmount;
+                    default: throw new ArgumentOutOfRangeException(nameof(strengthLevel), strengthLevel, "Unknown metric strength level.");
+                }
+            }
+
+            if (targetDensity > 0.65f)
+            {
+                float highAmount = (targetDensity - 0.65f) / 0.35f;
+                switch (strengthLevel)
+                {
+                    case MetricStrengthLevel.Strongest: return 0f;
+                    case MetricStrengthLevel.Strong: return 0.02f * highAmount;
+                    case MetricStrengthLevel.Medium: return 0.06f * highAmount;
+                    case MetricStrengthLevel.Weak: return 0.08f * highAmount;
+                    default: throw new ArgumentOutOfRangeException(nameof(strengthLevel), strengthLevel, "Unknown metric strength level.");
+                }
+            }
+
+            return 0f;
+        }
+
+        private static float ScoreJitter(
+            ResponsePlan plan,
+            SkeletonBuilderConfig config,
+            int stepIndex,
+            int turnLengthSteps)
+        {
+            if (config.SelectionJitter <= 0f)
+                return 0f;
+
+            float jitterAmount = Math.Min(config.SelectionJitter, MaximumJitter);
+            float unit = DeterministicUnitNoise(stepIndex, turnLengthSteps, plan.ResponseType);
+            return (unit * 2f - 1f) * jitterAmount;
+        }
+
+        private static float DeterministicUnitNoise(int stepIndex, int turnLengthSteps, ResponseType responseType)
+        {
+            unchecked
+            {
+                uint hash = 2166136261u;
+                hash = (hash ^ (uint)stepIndex) * 16777619u;
+                hash = (hash ^ (uint)turnLengthSteps) * 16777619u;
+                hash = (hash ^ (uint)responseType) * 16777619u;
+                return (hash & 0x00FFFFFFu) / 16777215f;
+            }
+        }
+
+        private static float GetEndingProximity(int stepsFromEnd, int stepsPerQuarter)
+        {
+            int endingWindow = Math.Max(1, stepsPerQuarter);
+            if (endingWindow == 1)
+                return 1f;
+
+            int boundedStepsFromEnd = Math.Max(0, Math.Min(stepsFromEnd, endingWindow - 1));
+            return 1f - boundedStepsFromEnd / (float)(endingWindow - 1);
         }
 
         private static SkeletonPatternSummary CreateEmptySummary(SkeletonBuildRequest request)
@@ -118,6 +412,9 @@ namespace IT4s.Rhythm.Generation.Skeleton
             if (request.Plan.TurnLengthSteps > 0 && request.Plan.TurnLengthSteps != request.TurnLengthSteps)
                 throw new ArgumentException("Request turn length must match the response plan turn length.", nameof(request));
 
+            ValidateFinite(request.Plan.TargetDensity, nameof(request.Plan.TargetDensity));
+            ValidateFinite(request.Plan.ComplementarityBias, nameof(request.Plan.ComplementarityBias));
+
             if (request.SourceTurn.velocity == null)
                 throw new ArgumentException("Source turn velocity data is required.", nameof(request));
 
@@ -147,8 +444,35 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
         private static void ValidateNonNegativeFinite(float value, string name)
         {
-            if (float.IsNaN(value) || float.IsInfinity(value) || value < 0f)
+            ValidateFinite(value, name);
+
+            if (value < 0f)
                 throw new ArgumentOutOfRangeException(name, "Value must be finite and non-negative.");
+        }
+
+        private static void ValidateFinite(float value, string name)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(name, "Value must be finite.");
+        }
+
+        private static float Clamp01(float value)
+        {
+            if (value <= 0f)
+                return 0f;
+
+            if (value >= 1f)
+                return 1f;
+
+            return value;
+        }
+
+        private static float SanitizeScore(float score)
+        {
+            if (float.IsNaN(score) || float.IsInfinity(score))
+                throw new InvalidOperationException("Skeleton raw scoring produced a non-finite value.");
+
+            return score;
         }
     }
 }
