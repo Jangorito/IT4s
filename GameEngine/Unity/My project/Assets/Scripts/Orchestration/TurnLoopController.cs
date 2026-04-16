@@ -127,6 +127,15 @@ namespace IT4s.Orchestration
         public bool HasLastAnalysisResult => runtimeState.HasLastAnalysisResult;
         public ResponsePlan CurrentResponsePlan => runtimeState.CurrentResponsePlan;
         public bool HasCurrentResponsePlan => runtimeState.HasCurrentResponsePlan;
+        public ResponsePlannerDebugSnapshot LastResponsePlannerSnapshot
+        {
+            get
+            {
+                ResponsePlanner concretePlanner = responsePlanner as ResponsePlanner;
+                return concretePlanner != null ? concretePlanner.LastSnapshot : null;
+            }
+        }
+        public bool HasLastResponsePlannerSnapshot => LastResponsePlannerSnapshot != null;
         public PatternTurn LastGeneratedAiPatternTurn => runtimeState.LastGeneratedAiPatternTurn;
         public bool HasLastGeneratedAiPatternTurn => runtimeState.HasLastGeneratedAiPatternTurn;
         public event Action<TurnPhase> OnPhaseChanged;

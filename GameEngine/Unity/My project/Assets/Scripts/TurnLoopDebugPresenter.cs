@@ -28,9 +28,11 @@ namespace IT4s.Debugging
         [Header("Renderers")]
         [SerializeField] private PatternTurnDebugRenderer humanPatternRenderer;
         [SerializeField] private PatternTurnDebugRenderer aiPatternRenderer;
+        [SerializeField] private ResponsePlannerDebugRenderer responsePlannerRenderer;
 
         [Header("Layout")]
         [SerializeField] private bool showDebugUi = true;
+        [SerializeField] private bool showResponsePlannerPanel = true;
         [SerializeField] private bool showAiPatternPanel = false;
         [SerializeField] private float maxPanelWidth = 980f;
         [SerializeField] private Vector2 screenPadding = new Vector2(16f, 16f);
@@ -61,6 +63,7 @@ namespace IT4s.Debugging
 
             humanPatternRenderer?.SetPanelTitle("HUMAN PATTERN");
             aiPatternRenderer?.SetPanelTitle("AI PATTERN");
+            responsePlannerRenderer?.SetTurnLoopController(turnLoopController);
         }
 
         private void OnEnable()
@@ -133,6 +136,14 @@ namespace IT4s.Debugging
             DrawPatternPanel(humanRect, humanPatternRenderer, "HUMAN PATTERN");
             DrawAnalysisPanel(analysisRect);
             y += comparisonHeight + SectionSpacing;
+
+            if (showResponsePlannerPanel && responsePlannerRenderer != null)
+            {
+                float plannerHeight = responsePlannerRenderer.GetPreferredHeight(width);
+                Rect plannerRect = new Rect(x, y, width, plannerHeight);
+                responsePlannerRenderer.Draw(plannerRect);
+                y += plannerHeight + SectionSpacing;
+            }
 
             if (!showAiPatternPanel)
             {
@@ -259,6 +270,13 @@ namespace IT4s.Debugging
             {
                 aiPatternRenderer = renderers[1];
             }
+
+            if (responsePlannerRenderer == null)
+            {
+                responsePlannerRenderer = GetComponentInChildren<ResponsePlannerDebugRenderer>(true);
+            }
+
+            responsePlannerRenderer?.SetTurnLoopController(turnLoopController);
         }
 
         private void PullExistingControllerState()
