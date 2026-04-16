@@ -4,6 +4,8 @@
 
 global int ckReady;
 global Event playTurn;
+global Event stopTurn;
+global int playbackGeneration;
 
 // Data pushed from Unity:
 global int stepCount;
@@ -36,19 +38,33 @@ fun int clampInt(int x, int lo, int hi)
     return x;
 }
 
-// play a snare hit (velocity 0..127)
-fun void hit(int v)
+// silence any currently ringing debug playback voices
+fun void silencePlayback()
 {
+    0 => snare.gain;
+    0 => metronome.gain;
+    0 => mGain.gain;
+}
+
+// play a snare hit (velocity 0..127)
+fun void hit(int v, int generation)
+{
+    if(generation != playbackGeneration) return;
+
     (clampInt(v, 0, 127) / 127.0) => float amp;
     0 => snare.pos;
     amp => snare.gain;
 
     // tiny wait to avoid edge cases on rapid retrigger
     5::ms => now;
+
+    if(generation != playbackGeneration) silencePlayback();
 }
 
-fun void metroClick(int accented)
+fun void metroClick(int accented, int generation)
 {
+    if(generation != playbackGeneration) return;
+
     <<< "Metronome click (accented:" + accented + ")" >>>;
     if(accented != 0)
     {
@@ -63,17 +79,17 @@ fun void metroClick(int accented)
     1 => metronome.gain;
 }
 
-fun void playMetronomeForTurn(int turnLengthSamples, int quarterSamples)
+fun void playMetronomeForTurn(int turnLengthSamples, int quarterSamples, int generation)
 {
     if(turnLengthSamples <= 0 || quarterSamples <= 0) return;
 
     0 => int elapsed;
     0 => int beatIdx;
 
-    while(elapsed < turnLengthSamples)
+    while(elapsed < turnLengthSamples && generation == playbackGeneration)
     {
-        if(beatIdx % 4 == 0) metroClick(1);
-        else metroClick(0);
+        if(beatIdx % 4 == 0) metroClick(1, generation);
+        else metroClick(0, generation);
 
         quarterSamples::samp => now;
         elapsed + quarterSamples => elapsed;
@@ -83,9 +99,10 @@ fun void playMetronomeForTurn(int turnLengthSamples, int quarterSamples)
 
 // Build an event list (time in samples, vel) from step arrays,
 // sort by time (offset can reorder), then schedule sample-accurately.
-fun void playTurnNow()
+fun void playTurnNow(int generation)
 {
     if(stepCount <= 0 || samplesPerStep <= 0) return;
+    if(generation != playbackGeneration) return;
 
     int times[0];
     int vels[0];
@@ -126,23 +143,40 @@ fun void playTurnNow()
     {
         (stepCount * samplesPerStep) => int turnLen;
         (samplesPerStep * stepsPerQuarter) => int quarter;
-        spork ~ playMetronomeForTurn(turnLen, quarter);
+        spork ~ playMetronomeForTurn(turnLen, quarter, generation);
     }
 
     // schedule turn hits from "now"
     0 => int lastT;
     for(0 => int k; k < times.size(); k++)
     {
+        if(generation != playbackGeneration) return;
+
         (times[k] - lastT) => int dt;
         if(dt > 0) dt::samp => now;
         times[k] => lastT;
 
-        spork ~ hit(vels[k]);
+        if(generation != playbackGeneration) return;
+
+        spork ~ hit(vels[k], generation);
     }
 }
+
+fun void listenForStopTurn()
+{
+    while(true)
+    {
+        stopTurn => now;
+        playbackGeneration++;
+        silencePlayback();
+    }
+}
+
+spork ~ listenForStopTurn();
 
 while(true)
 {
     playTurn => now;
-    spork ~ playTurnNow();
+    playbackGeneration => int generation;
+    spork ~ playTurnNow(generation);
 }

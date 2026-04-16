@@ -58,6 +58,24 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
         metronomeOnPlayback = enabled;
     }
 
+    public virtual bool StopPlayback()
+    {
+        if (!ready)
+        {
+            return false;
+        }
+
+        if (chuck == null)
+        {
+            Debug.LogWarning("[IT4] Cannot stop ChucK TurnPlayer because no ChuckMainInstance is assigned.");
+            return false;
+        }
+
+        chuck.BroadcastEvent("stopTurn");
+        Debug.Log("[IT4] Broadcasted 'stopTurn'.");
+        return true;
+    }
+
     public void PlayTurn(PatternTurn turn, bool? metronomeOverride = null)
     {
         if (!ready)

@@ -95,6 +95,15 @@ namespace IT4s.Orchestration
         [Tooltip("Hold this key to allow hits to start a turn when the hold-key gate is enabled.")]
         private KeyCode debugHoldKey = KeyCode.LeftShift;
 
+        [Header("Debug Re-Arm")]
+        [SerializeField]
+        [Tooltip("Temporary debug control: when enabled, the re-arm key returns playback/idle phases to WaitingForHuman.")]
+        private bool enableDebugRearmHotkey = true;
+
+        [SerializeField]
+        [Tooltip("Temporary debug key used to manually re-arm the loop for another human capture.")]
+        private KeyCode debugRearmKey = KeyCode.Space;
+
         // These are plain C# collaborators rather than scene components, so they are expected
         // to be supplied by a composition root or setup code through InjectDependencies(...).
         // The controller never creates them internally because orchestration should only coordinate.
@@ -111,6 +120,8 @@ namespace IT4s.Orchestration
         // but all transitions are funnelled through SetPhase(...) for consistency and logging.
         public TurnPhase CurrentPhase { get; private set; } = TurnPhase.Transition;
         public MusicalTimingConfig CurrentMusicalTiming => currentMusicalTiming;
+        public bool DebugRearmHotkeyEnabled => enableDebugRearmHotkey;
+        public KeyCode DebugRearmKey => debugRearmKey;
 
         // Running state is kept separate from CurrentPhase so the loop can be paused or stopped
         // without needing extra domain phases before they are truly justified.
@@ -172,6 +183,7 @@ namespace IT4s.Orchestration
         {
             // Unity drives the controller through Update, but the real entry point remains Tick()
             // so future tests or alternate schedulers can execute the same state machine.
+            TickDebugRearmHotkey();
             Tick();
         }
 
@@ -359,6 +371,34 @@ namespace IT4s.Orchestration
         }
 
         /// <summary>
+        /// Temporary debug-only re-arm hook for rapid skeleton/pipeline iteration.
+        /// This is deliberately not final loop orchestration: it only exits safe playback/idle phases
+        /// back to WaitingForHuman and clears capture-local state for the next manual cycle.
+        /// </summary>
+        public bool TryDebugRearmForHumanCapture()
+        {
+            if (!enableDebugRearmHotkey || !isRunning || !CanDebugRearmFromPhase(CurrentPhase))
+            {
+                return false;
+            }
+
+            if (turnCaptureController != null && turnCaptureController.IsCapturing)
+            {
+                return false;
+            }
+
+            if (CurrentPhase == TurnPhase.PlayingAiResponse)
+            {
+                TryDisengageAiPlaybackForDebugRearm();
+            }
+
+            ClearCaptureRuntimeState();
+            SetPhase(TurnPhase.WaitingForHuman);
+            EmitDebugMessage($"Debug re-arm returned the turn loop to {TurnPhase.WaitingForHuman}.");
+            return true;
+        }
+
+        /// <summary>
         /// Single transition gateway for the controller.
         /// Centralising phase changes keeps observability consistent across runtime, UI, and tests.
         /// </summary>
@@ -379,6 +419,45 @@ namespace IT4s.Orchestration
         {
             Debug.Log($"[TurnLoopController] {message}");
             OnDebugMessage?.Invoke(message);
+        }
+
+        private void TickDebugRearmHotkey()
+        {
+            if (!enableDebugRearmHotkey || debugRearmKey == KeyCode.None)
+            {
+                return;
+            }
+
+            if (!UnityEngine.Input.GetKeyDown(debugRearmKey))
+            {
+                return;
+            }
+
+            TryDebugRearmForHumanCapture();
+        }
+
+        private static bool CanDebugRearmFromPhase(TurnPhase phase)
+        {
+            return
+                phase == TurnPhase.PlayingAiResponse ||
+                phase == TurnPhase.Transition;
+        }
+
+        private void TryDisengageAiPlaybackForDebugRearm()
+        {
+            if (aiTurnPlayer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                aiTurnPlayer.StopPlayback();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[TurnLoopController] Debug re-arm could not stop AI playback cleanly: {ex.Message}");
+            }
         }
 
         private string DescribeDependencyState()
