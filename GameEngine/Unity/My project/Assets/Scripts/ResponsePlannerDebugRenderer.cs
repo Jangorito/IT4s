@@ -20,7 +20,8 @@ namespace IT4s.Debugging
         private const float SectionSpacing = 9f;
         private const float ColumnSpacing = 16f;
         private const float ScoreNameWidth = 150f;
-        private const float MinimumHeight = 420f;
+        private const float ScoreGroupMargin = 0.5f;
+        private const float MinimumHeight = 520f;
 
         private static readonly ResponseType[] ResponseTypes =
         {
@@ -37,7 +38,7 @@ namespace IT4s.Debugging
 
         [Header("Content")]
         [SerializeField] private bool drawStandalone;
-        [SerializeField] private Rect standaloneRect = new Rect(16f, 400f, 460f, 420f);
+        [SerializeField] private Rect standaloneRect = new Rect(16f, 400f, 460f, 520f);
 
         [Header("Colours")]
         [SerializeField] private Color panelBackground = new Color(0.10f, 0.10f, 0.10f, 0.94f);
@@ -51,6 +52,7 @@ namespace IT4s.Debugging
         private GUIStyle sectionStyle;
         private GUIStyle labelStyle;
         private GUIStyle valueStyle;
+        private GUIStyle decisionStyle;
         private GUIStyle selectedValueStyle;
         private GUIStyle placeholderStyle;
 
@@ -103,7 +105,10 @@ namespace IT4s.Debugging
                 new Rect(contentRect.x, y, contentRect.width, SelectedHeight),
                 $"Selected: {snapshot.SelectedResponseType}",
                 selectedStyle);
-            y += SelectedHeight + SectionSpacing;
+            y += SelectedHeight;
+
+            y = DrawDecisionSummary(contentRect, y, snapshot);
+            y += SectionSpacing;
 
             y = DrawSourceSummary(contentRect, y, snapshot);
             y += SectionSpacing;
@@ -177,15 +182,76 @@ namespace IT4s.Debugging
             GUI.Label(new Rect(contentRect.x, y, contentRect.width, SectionTitleHeight), "RESPONSE TYPE SCORES", sectionStyle);
             y += SectionTitleHeight;
 
+            float selectedScore = GetScore(snapshot, snapshot.SelectedResponseType);
+            y = DrawScoreGroup(contentRect, y, snapshot, selectedScore, "HIGH", true);
+            y = DrawScoreGroup(contentRect, y, snapshot, selectedScore, "LOW", false);
+
+            return y;
+        }
+
+        private float DrawDecisionSummary(Rect contentRect, float y, ResponsePlannerDebugSnapshot snapshot)
+        {
+            ResponseType topResponseType = GetTopScoringType(snapshot, out float topScore);
+            float selectedScore = GetScore(snapshot, snapshot.SelectedResponseType);
+
+            if (topResponseType != snapshot.SelectedResponseType)
+            {
+                string reason = InferOverrideReason(snapshot.SourceDescriptorSummary);
+                GUI.Label(
+                    new Rect(contentRect.x, y, contentRect.width, RowHeight),
+                    $"Decision Override: {snapshot.SelectedResponseType} over {topResponseType} ({reason})",
+                    decisionStyle);
+                y += RowHeight;
+            }
+
+            DrawField(
+                new Rect(contentRect.x, y, contentRect.width, RowHeight),
+                "Top Score",
+                $"{topResponseType} ({FormatFloat(topScore)})");
+            y += RowHeight;
+
+            DrawField(
+                new Rect(contentRect.x, y, contentRect.width, RowHeight),
+                "Selected",
+                $"{snapshot.SelectedResponseType} ({FormatFloat(selectedScore)})");
+            return y + RowHeight;
+        }
+
+        private float DrawScoreGroup(
+            Rect contentRect,
+            float y,
+            ResponsePlannerDebugSnapshot snapshot,
+            float selectedScore,
+            string groupLabel,
+            bool drawHighGroup)
+        {
+            GUI.Label(new Rect(contentRect.x, y, contentRect.width, SectionTitleHeight), groupLabel, sectionStyle);
+            y += SectionTitleHeight;
+
+            bool drewAnyRow = false;
             for (int i = 0; i < ResponseTypes.Length; i++)
             {
                 ResponseType responseType = ResponseTypes[i];
-                bool selected = responseType == snapshot.SelectedResponseType;
+                float score = GetScore(snapshot, responseType);
+                bool isHighScore = score >= selectedScore - ScoreGroupMargin;
+
+                if (isHighScore != drawHighGroup)
+                {
+                    continue;
+                }
+
                 DrawScoreRow(
                     new Rect(contentRect.x, y, contentRect.width, RowHeight),
                     responseType,
-                    GetScore(snapshot, responseType),
-                    selected);
+                    score,
+                    responseType == snapshot.SelectedResponseType);
+                y += RowHeight;
+                drewAnyRow = true;
+            }
+
+            if (!drewAnyRow)
+            {
+                GUI.Label(new Rect(contentRect.x + 4f, y, contentRect.width - 4f, RowHeight), "(none)", placeholderStyle);
                 y += RowHeight;
             }
 
@@ -260,6 +326,53 @@ namespace IT4s.Debugging
             }
 
             return 0f;
+        }
+
+        private static ResponseType GetTopScoringType(ResponsePlannerDebugSnapshot snapshot, out float topScore)
+        {
+            ResponseType topResponseType = snapshot != null
+                ? snapshot.SelectedResponseType
+                : ResponseType.Mirror;
+            topScore = float.MinValue;
+
+            for (int i = 0; i < ResponseTypes.Length; i++)
+            {
+                ResponseType responseType = ResponseTypes[i];
+                float score = GetScore(snapshot, responseType);
+
+                if (score > topScore)
+                {
+                    topResponseType = responseType;
+                    topScore = score;
+                }
+            }
+
+            return topResponseType;
+        }
+
+        private static string InferOverrideReason(ResponsePlannerDescriptorSummary descriptor)
+        {
+            if (descriptor == null)
+            {
+                return "rule preference";
+            }
+
+            if (descriptor.EndingIsOpen || !descriptor.HasStrongEnding)
+            {
+                return "weak ending";
+            }
+
+            if (descriptor.HasMeaningfulAnchors)
+            {
+                return "anchor preservation";
+            }
+
+            if (descriptor.HasConversationalSpace)
+            {
+                return "gap-play";
+            }
+
+            return "rule preference";
         }
 
         private static string GetProfileLabel(ResponsePlannerDescriptorSummary descriptor)
@@ -352,6 +465,13 @@ namespace IT4s.Debugging
             {
                 fontSize = 11,
                 normal = { textColor = Color.white }
+            };
+
+            decisionStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 11,
+                fontStyle = FontStyle.Bold,
+                normal = { textColor = selectedTextColor }
             };
 
             selectedValueStyle = new GUIStyle(GUI.skin.label)
