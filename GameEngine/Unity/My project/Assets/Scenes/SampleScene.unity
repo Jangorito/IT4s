@@ -593,7 +593,8 @@ Transform:
   m_LocalPosition: {x: -1391.6254, y: 692.0488, z: -24.807587}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1560853564}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1376128909
@@ -766,6 +767,63 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b44887418978244fea00d1ae6aa8703a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!1 &1560853563
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1560853564}
+  - component: {fileID: 1560853565}
+  m_Layer: 0
+  m_Name: PlannerUI
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1560853564
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1560853563}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 846225788}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1560853565
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1560853563}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0ea1a06d74dbd6498165f28a36fe87b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  turnLoopController: {fileID: 1812478583}
+  drawStandalone: 0
+  standaloneRect:
+    serializedVersion: 2
+    x: 16
+    y: 400
+    width: 460
+    height: 420
+  panelBackground: {r: 0.1, g: 0.1, b: 0.1, a: 0.94}
+  borderColor: {r: 0.75, g: 0.75, b: 0.75, a: 1}
+  selectedRowColor: {r: 0.18, g: 0.32, b: 0.44, a: 0.95}
+  selectedTextColor: {r: 0.86, g: 0.96, b: 1, a: 1}
+  mutedTextColor: {r: 0.82, g: 0.82, b: 0.82, a: 1}
 --- !u!1 &1812478576
 GameObject:
   m_ObjectHideFlags: 0
@@ -901,6 +959,8 @@ MonoBehaviour:
   debugHitValidityEnabled: 1
   requireDebugHoldKeyForStart: 0
   debugHoldKey: 304
+  enableDebugRearmHotkey: 1
+  debugRearmKey: 32
 --- !u!114 &1812478584
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -946,7 +1006,11 @@ MonoBehaviour:
   turnLoopController: {fileID: 1812478583}
   humanPatternRenderer: {fileID: 846225787}
   aiPatternRenderer: {fileID: 60411587}
+  responsePlannerRenderer: {fileID: 1560853565}
+  skeletonRenderer: {fileID: 0}
   showDebugUi: 1
+  showResponsePlannerPanel: 1
+  showSkeletonPanel: 1
   showAiPatternPanel: 0
   maxPanelWidth: 980
   screenPadding: {x: 16, y: 16}
