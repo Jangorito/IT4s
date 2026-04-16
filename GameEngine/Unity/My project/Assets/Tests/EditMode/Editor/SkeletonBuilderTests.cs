@@ -413,6 +413,29 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
+        public void BuildSkeleton_RawScores_MetricDominatesWeakSourceAndDensityFavour()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonPattern pattern = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                sourceVelocities: Velocities(48, 1),
+                plan: Plan(
+                    48,
+                    responseType: ResponseType.Mirror,
+                    targetDensity: 0.90f,
+                    complementarityBias: 0f),
+                config: DominanceStressConfig()));
+
+            Assert.That(pattern.StepMeta[0].IsStrongBeat, Is.True);
+            AssertHasFlag(pattern.StepMeta[1].ReasonFlags, SkeletonReasonFlags.MetricWeak);
+            Assert.That(pattern.StepMeta[1].SourceOccupied, Is.True);
+            Assert.That(pattern.StepMeta[1].DensityShapingScore, Is.GreaterThan(0f));
+            Assert.That(pattern.StepMeta[0].MetricScore, Is.GreaterThan(pattern.StepMeta[1].MetricScore));
+            Assert.That(pattern.StepMeta[0].FinalScore, Is.GreaterThan(pattern.StepMeta[1].FinalScore));
+        }
+
+        [Test]
         public void BuildSkeleton_MirrorSourceRelation_RewardsSourceOccupiedComparableStep()
         {
             var builder = new SkeletonBuilder();
@@ -447,6 +470,28 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
+        public void BuildSkeleton_SourceRelation_MirrorBonusExceedsComplementGapBonus()
+        {
+            var builder = new SkeletonBuilder();
+
+            SkeletonPattern mirror = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                sourceVelocities: Velocities(16, 0),
+                plan: Plan(16, responseType: ResponseType.Mirror, complementarityBias: 0f),
+                config: NoJitterConfig()));
+
+            SkeletonPattern complement = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                sourceVelocities: Velocities(16, 0),
+                plan: Plan(16, responseType: ResponseType.Complement, complementarityBias: 1f),
+                config: NoJitterConfig()));
+
+            Assert.That(mirror.StepMeta[0].SourceRelationScore, Is.GreaterThan(complement.StepMeta[4].SourceRelationScore));
+        }
+
+        [Test]
         public void BuildSkeleton_PreserveAnchors_BoostsAnchorScoreWhenEnabled()
         {
             var builder = new SkeletonBuilder();
@@ -469,6 +514,31 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             Assert.That(unprotected.StepMeta[4].AnchorScore, Is.EqualTo(0f));
             Assert.That(protectedPattern.StepMeta[4].AnchorScore, Is.GreaterThan(0f));
             Assert.That(protectedPattern.StepMeta[4].FinalScore, Is.GreaterThan(unprotected.StepMeta[4].FinalScore));
+        }
+
+        [Test]
+        public void BuildSkeleton_PreserveAnchors_RanksExplicitAboveFallbackAboveNonAnchor()
+        {
+            var builder = new SkeletonBuilder();
+            TurnAnalysisResult analysis = Analysis(ExplicitFlagsWithAnchorIndices(
+                flagLength: 16,
+                explicitAnchorIndices: new[] { 0 },
+                fallbackAnchorIndices: new[] { 0, 4 }));
+
+            SkeletonPattern pattern = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                plan: Plan(16, preserveAnchors: true),
+                sourceAnalysis: analysis,
+                config: AnchorPriorityConfig()));
+
+            Assert.That(pattern.StepMeta[0].IsExplicitAnchor, Is.True);
+            Assert.That(pattern.StepMeta[4].IsFallbackAnchor, Is.True);
+            Assert.That(pattern.StepMeta[8].SourceAnchor, Is.False);
+            Assert.That(pattern.StepMeta[0].AnchorScore, Is.GreaterThan(pattern.StepMeta[4].AnchorScore));
+            Assert.That(pattern.StepMeta[4].AnchorScore, Is.GreaterThan(pattern.StepMeta[8].AnchorScore));
+            Assert.That(pattern.StepMeta[0].FinalScore, Is.GreaterThan(pattern.StepMeta[4].FinalScore));
+            Assert.That(pattern.StepMeta[4].FinalScore, Is.GreaterThan(pattern.StepMeta[8].FinalScore));
         }
 
         [Test]
@@ -522,6 +592,21 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
+        public void BuildSkeleton_DensityShaping_HighDensityDoesNotOutrankStrongestBeats()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonPattern pattern = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                plan: Plan(48, targetDensity: 1f),
+                config: MetricFocusedConfig()));
+
+            Assert.That(pattern.StepMeta[1].DensityShapingScore, Is.GreaterThan(0f));
+            Assert.That(pattern.StepMeta[0].FinalScore, Is.GreaterThan(pattern.StepMeta[1].FinalScore));
+            Assert.That(pattern.StepMeta[12].FinalScore, Is.GreaterThan(pattern.StepMeta[11].FinalScore));
+        }
+
+        [Test]
         public void BuildSkeleton_ZeroJitter_ProducesIdenticalSelectionScores()
         {
             var builder = new SkeletonBuilder();
@@ -542,6 +627,24 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
                 Assert.That(second.StepMeta[i].FinalScore, Is.EqualTo(first.StepMeta[i].FinalScore), "Final score at step {0}", i);
                 Assert.That(second.StepMeta[i].JitterOffset, Is.EqualTo(0f), "Jitter at step {0}", i);
             }
+        }
+
+        [Test]
+        public void BuildSkeleton_JitteredScoreOrdering_IsDeterministic()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonBuildRequest request = Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                plan: Plan(48, responseType: ResponseType.Fill, targetDensity: 0.75f, complementarityBias: 0.80f),
+                sourceVelocities: Velocities(48, 0, 3, 12, 17, 31),
+                sourceAnalysis: Analysis(ExplicitAnchorFlagsOnly(48, 12, 36)),
+                config: JitteredConfig());
+
+            SkeletonPattern first = builder.BuildSkeleton(request);
+            SkeletonPattern second = builder.BuildSkeleton(request);
+
+            AssertSameScoreOrdering(first, second);
         }
 
         private static SkeletonBuildRequest Request(
@@ -602,6 +705,37 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
                 EndingInfluenceWeight = 0f,
                 SelectionJitter = 0f,
                 RebalanceAcrossSegments = false
+            };
+        }
+
+        private static SkeletonBuilderConfig DominanceStressConfig()
+        {
+            return new SkeletonBuilderConfig
+            {
+                AnchorInfluenceWeight = 0f,
+                EndingInfluenceWeight = 0f,
+                SelectionJitter = 0f,
+                RebalanceAcrossSegments = false
+            };
+        }
+
+        private static SkeletonBuilderConfig AnchorPriorityConfig()
+        {
+            return new SkeletonBuilderConfig
+            {
+                MirrorWeight = 0f,
+                ComplementWeight = 0f,
+                EndingInfluenceWeight = 0f,
+                SelectionJitter = 0f,
+                RebalanceAcrossSegments = false
+            };
+        }
+
+        private static SkeletonBuilderConfig JitteredConfig()
+        {
+            return new SkeletonBuilderConfig
+            {
+                SelectionJitter = 1f
             };
         }
 
@@ -698,6 +832,35 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         private static void AssertLacksFlag(SkeletonReasonFlags actual, SkeletonReasonFlags unexpected)
         {
             Assert.That((actual & unexpected) == 0, Is.True, "Unexpected flag {0} in {1}", unexpected, actual);
+        }
+
+        private static void AssertSameScoreOrdering(SkeletonPattern expected, SkeletonPattern actual)
+        {
+            Assert.That(actual.SelectionScores, Has.Length.EqualTo(expected.SelectionScores.Length));
+
+            for (int left = 0; left < expected.SelectionScores.Length; left++)
+            {
+                for (int right = left + 1; right < expected.SelectionScores.Length; right++)
+                {
+                    Assert.That(
+                        CompareScores(actual.SelectionScores[left], actual.SelectionScores[right]),
+                        Is.EqualTo(CompareScores(expected.SelectionScores[left], expected.SelectionScores[right])),
+                        "Score ordering for steps {0} and {1}",
+                        left,
+                        right);
+                }
+            }
+        }
+
+        private static int CompareScores(float left, float right)
+        {
+            if (left > right)
+                return 1;
+
+            if (left < right)
+                return -1;
+
+            return 0;
         }
     }
 }

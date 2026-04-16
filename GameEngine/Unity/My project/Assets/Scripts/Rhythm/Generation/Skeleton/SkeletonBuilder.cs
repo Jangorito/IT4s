@@ -7,11 +7,16 @@ namespace IT4s.Rhythm.Generation.Skeleton
     public sealed class SkeletonBuilder : ISkeletonBuilder
     {
         private const float MetricWeakThreshold = 0.35f;
-        private const float SourceRelationScale = 0.35f;
-        private const float AnchorExplicitScale = 0.45f;
-        private const float AnchorFallbackScale = 0.32f;
-        private const float EndingScale = 0.28f;
-        private const float MaximumJitter = 0.05f;
+        private const float SourceRelationScale = 0.25f;
+        private const float SourceRelationMaxMagnitude = 0.30f;
+        private const float AnchorExplicitScale = 0.42f;
+        private const float AnchorFallbackScale = 0.30f;
+        private const float AnchorMaxMagnitude = 0.50f;
+        private const float EndingScale = 0.16f;
+        private const float EndingMaxMagnitude = 0.20f;
+        private const float DensityShapingMaxMagnitude = 0.20f;
+        private const float PhraseBalanceMaxMagnitude = 0.10f;
+        private const float MaximumJitter = 0.01f;
 
         public SkeletonPattern BuildSkeleton(SkeletonBuildRequest request)
         {
@@ -162,9 +167,15 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
         private static float ScoreMetric(SkeletonBuilderConfig config, float metricSalience, bool isStrongBeat)
         {
+            float metricWeight = Clamp01(config.MetricStrengthWeight);
+            float strongBeatWeight = Clamp01(config.StrongBeatPreferenceWeight);
+            float weightedSalience = metricSalience * metricWeight;
+            float strongBeatBoost = isStrongBeat
+                ? Math.Min(1f - weightedSalience, 0.20f * strongBeatWeight)
+                : 0f;
+
             return SanitizeScore(
-                config.MetricStrengthWeight * metricSalience +
-                (isStrongBeat ? config.StrongBeatPreferenceWeight : 0f));
+                Clamp01(weightedSalience + strongBeatBoost));
         }
 
         private static float ScoreSourceRelation(
@@ -181,31 +192,43 @@ namespace IT4s.Rhythm.Generation.Skeleton
             switch (plan.ResponseType)
             {
                 case ResponseType.Mirror:
-                    return config.MirrorWeight * SourceRelationScale *
-                        (sourceOccupied ? 1f : (sourceAnchor ? 0.65f : -0.10f * complementarity));
+                    return ClampMagnitude(
+                        config.MirrorWeight * SourceRelationScale *
+                        (sourceOccupied ? 1f : (sourceAnchor ? 0.55f : -0.06f * complementarity)),
+                        SourceRelationMaxMagnitude);
 
                 case ResponseType.Complement:
-                    return config.ComplementWeight * SourceRelationScale *
-                        (sourceOccupied ? (-0.30f - 0.20f * complementarity) : (0.80f + 0.20f * complementarity));
+                    return ClampMagnitude(
+                        config.ComplementWeight * SourceRelationScale *
+                        (sourceOccupied ? (-0.25f - 0.15f * complementarity) : (0.70f + 0.10f * complementarity)),
+                        SourceRelationMaxMagnitude);
 
                 case ResponseType.Simplify:
-                    return config.MirrorWeight * SourceRelationScale *
-                        (sourceRelated ? 0.45f : 0.10f * complementarity);
+                    return ClampMagnitude(
+                        config.MirrorWeight * SourceRelationScale *
+                        (sourceRelated ? 0.40f : 0.08f * complementarity),
+                        SourceRelationMaxMagnitude);
 
                 case ResponseType.Intensify:
-                    return SourceRelationScale *
+                    return ClampMagnitude(
+                        SourceRelationScale *
                         (sourceRelated
-                            ? config.MirrorWeight * 0.70f
-                            : config.ComplementWeight * (0.25f + 0.25f * complementarity));
+                            ? config.MirrorWeight * 0.60f
+                            : config.ComplementWeight * (0.22f + 0.18f * complementarity)),
+                        SourceRelationMaxMagnitude);
 
                 case ResponseType.Contrast:
-                    return config.ComplementWeight * SourceRelationScale *
-                        (sourceOccupied ? -0.35f : (0.55f + 0.25f * complementarity));
+                    return ClampMagnitude(
+                        config.ComplementWeight * SourceRelationScale *
+                        (sourceOccupied ? -0.30f : (0.50f + 0.20f * complementarity)),
+                        SourceRelationMaxMagnitude);
 
                 case ResponseType.Fill:
-                    float interstitialSupport = isStrongBeat ? 0.20f : 0.55f + (1f - metricSalience) * 0.25f;
-                    return config.ComplementWeight * SourceRelationScale *
-                        (sourceOccupied ? -0.15f : interstitialSupport + complementarity * 0.20f);
+                    float interstitialSupport = isStrongBeat ? 0.18f : 0.50f + (1f - metricSalience) * 0.20f;
+                    return ClampMagnitude(
+                        config.ComplementWeight * SourceRelationScale *
+                        (sourceOccupied ? -0.12f : interstitialSupport + complementarity * 0.15f),
+                        SourceRelationMaxMagnitude);
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(plan.ResponseType), plan.ResponseType, "Unknown response type.");
@@ -223,7 +246,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
             float anchorScale = isExplicitAnchor ? AnchorExplicitScale : AnchorFallbackScale;
 
-            return SanitizeScore(config.AnchorInfluenceWeight * anchorScale);
+            return SanitizeScore(Math.Min(config.AnchorInfluenceWeight * anchorScale, AnchorMaxMagnitude));
         }
 
         private static float ScoreEnding(
@@ -251,7 +274,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 if (isStrongBeat)
                     directionalScore += 0.20f * lateWeight;
 
-                return SanitizeScore(config.EndingInfluenceWeight * EndingScale * directionalScore);
+                return SanitizeScore(ClampMagnitude(config.EndingInfluenceWeight * EndingScale * directionalScore, EndingMaxMagnitude));
             }
 
             switch (plan.ResponseType)
@@ -284,7 +307,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     throw new ArgumentOutOfRangeException(nameof(plan.ResponseType), plan.ResponseType, "Unknown response type.");
             }
 
-            return SanitizeScore(config.EndingInfluenceWeight * EndingScale * directionalScore);
+            return SanitizeScore(ClampMagnitude(config.EndingInfluenceWeight * EndingScale * directionalScore, EndingMaxMagnitude));
         }
 
         private static float ScorePhraseBalance(SkeletonBuilderConfig config, int segmentIndex)
@@ -296,9 +319,9 @@ namespace IT4s.Rhythm.Generation.Skeleton
             {
                 case 1:
                 case 2:
-                    return 0.03f;
+                    return ClampMagnitude(0.03f, PhraseBalanceMaxMagnitude);
                 case 3:
-                    return 0.015f;
+                    return ClampMagnitude(0.015f, PhraseBalanceMaxMagnitude);
                 default:
                     return 0f;
             }
@@ -313,10 +336,10 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 float lowAmount = (0.35f - targetDensity) / 0.35f;
                 switch (strengthLevel)
                 {
-                    case MetricStrengthLevel.Strongest: return 0.10f * lowAmount;
-                    case MetricStrengthLevel.Strong: return 0.04f * lowAmount;
+                    case MetricStrengthLevel.Strongest: return ClampMagnitude(0.08f * lowAmount, DensityShapingMaxMagnitude);
+                    case MetricStrengthLevel.Strong: return ClampMagnitude(0.03f * lowAmount, DensityShapingMaxMagnitude);
                     case MetricStrengthLevel.Medium: return 0f;
-                    case MetricStrengthLevel.Weak: return -0.04f * lowAmount;
+                    case MetricStrengthLevel.Weak: return ClampMagnitude(-0.03f * lowAmount, DensityShapingMaxMagnitude);
                     default: throw new ArgumentOutOfRangeException(nameof(strengthLevel), strengthLevel, "Unknown metric strength level.");
                 }
             }
@@ -327,9 +350,9 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 switch (strengthLevel)
                 {
                     case MetricStrengthLevel.Strongest: return 0f;
-                    case MetricStrengthLevel.Strong: return 0.02f * highAmount;
-                    case MetricStrengthLevel.Medium: return 0.06f * highAmount;
-                    case MetricStrengthLevel.Weak: return 0.08f * highAmount;
+                    case MetricStrengthLevel.Strong: return ClampMagnitude(0.02f * highAmount, DensityShapingMaxMagnitude);
+                    case MetricStrengthLevel.Medium: return ClampMagnitude(0.04f * highAmount, DensityShapingMaxMagnitude);
+                    case MetricStrengthLevel.Weak: return ClampMagnitude(0.05f * highAmount, DensityShapingMaxMagnitude);
                     default: throw new ArgumentOutOfRangeException(nameof(strengthLevel), strengthLevel, "Unknown metric strength level.");
                 }
             }
@@ -463,6 +486,17 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
             if (value >= 1f)
                 return 1f;
+
+            return value;
+        }
+
+        private static float ClampMagnitude(float value, float maxMagnitude)
+        {
+            if (value > maxMagnitude)
+                return maxMagnitude;
+
+            if (value < -maxMagnitude)
+                return -maxMagnitude;
 
             return value;
         }
