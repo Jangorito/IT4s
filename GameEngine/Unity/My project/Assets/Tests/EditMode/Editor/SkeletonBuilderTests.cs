@@ -96,6 +96,9 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
                 Assert.That(pattern.ActiveSteps[i], Is.False, "Active flag at step {0}", i);
                 Assert.That(pattern.SelectionScores[i], Is.EqualTo(0f), "Selection score at step {0}", i);
                 Assert.That(pattern.StepMeta[i].StepIndex, Is.EqualTo(i), "Step index at {0}", i);
+                Assert.That(pattern.StepMeta[i].SegmentIndex, Is.InRange(0, 3), "Segment index at step {0}", i);
+                Assert.That(pattern.StepMeta[i].StepsFromEnd, Is.EqualTo(pattern.TurnLengthSteps - 1 - i), "Steps from end at step {0}", i);
+                Assert.That(pattern.StepMeta[i].IsStrongBeat, Is.EqualTo(i % 12 == 0), "Strong beat flag at step {0}", i);
                 Assert.That(pattern.StepMeta[i].Selected, Is.False, "Selected flag at step {0}", i);
                 Assert.That(pattern.StepMeta[i].FinalScore, Is.EqualTo(0f), "Final score at step {0}", i);
             }
@@ -142,22 +145,28 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
-        public void BuildSkeleton_SourceAnchorFlags_AreMappedIntoStepMeta()
+        public void BuildSkeleton_SourceAnchorFlags_AreMappedAsExplicitAnchors()
         {
             var builder = new SkeletonBuilder();
             SkeletonBuildRequest request = Request(
-                sourceAnalysis: Analysis(AnchorFlags(16, 2, 7)));
+                sourceAnalysis: Analysis(ExplicitAnchorFlagsOnly(16, 2, 7)));
 
             SkeletonPattern pattern = builder.BuildSkeleton(request);
 
             Assert.That(pattern.StepMeta[2].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[2].IsExplicitAnchor, Is.True);
+            Assert.That(pattern.StepMeta[2].IsFallbackAnchor, Is.False);
             Assert.That(pattern.StepMeta[7].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[7].IsExplicitAnchor, Is.True);
+            Assert.That(pattern.StepMeta[7].IsFallbackAnchor, Is.False);
             Assert.That(pattern.StepMeta[1].SourceAnchor, Is.False);
+            Assert.That(pattern.StepMeta[1].IsExplicitAnchor, Is.False);
+            Assert.That(pattern.StepMeta[1].IsFallbackAnchor, Is.False);
             Assert.That(pattern.StepMeta[8].SourceAnchor, Is.False);
         }
 
         [Test]
-        public void BuildSkeleton_SourceAnchorIndices_FillAnchorMapWhenFlagsAreAbsent()
+        public void BuildSkeleton_SourceAnchorIndices_AreMappedAsFallbackAnchorsWhenFlagsAreAbsent()
         {
             var builder = new SkeletonBuilder();
             SkeletonBuildRequest request = Request(
@@ -166,8 +175,62 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             SkeletonPattern pattern = builder.BuildSkeleton(request);
 
             Assert.That(pattern.StepMeta[3].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[3].IsExplicitAnchor, Is.False);
+            Assert.That(pattern.StepMeta[3].IsFallbackAnchor, Is.True);
             Assert.That(pattern.StepMeta[10].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[10].IsExplicitAnchor, Is.False);
+            Assert.That(pattern.StepMeta[10].IsFallbackAnchor, Is.True);
             Assert.That(pattern.StepMeta[4].SourceAnchor, Is.False);
+            Assert.That(pattern.StepMeta[4].IsExplicitAnchor, Is.False);
+            Assert.That(pattern.StepMeta[4].IsFallbackAnchor, Is.False);
+        }
+
+        [Test]
+        public void BuildSkeleton_AnchorProvenance_PreservesExplicitAndFallbackSources()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonBuildRequest request = Request(
+                turnLengthSteps: 16,
+                sourceAnalysis: Analysis(ExplicitFlagsWithAnchorIndices(
+                    flagLength: 16,
+                    explicitAnchorIndices: new[] { 2 },
+                    fallbackAnchorIndices: new[] { 2, 9 })));
+
+            SkeletonPattern pattern = builder.BuildSkeleton(request);
+
+            Assert.That(pattern.StepMeta[2].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[2].IsExplicitAnchor, Is.True);
+            Assert.That(pattern.StepMeta[2].IsFallbackAnchor, Is.False);
+
+            Assert.That(pattern.StepMeta[9].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[9].IsExplicitAnchor, Is.False);
+            Assert.That(pattern.StepMeta[9].IsFallbackAnchor, Is.True);
+        }
+
+        [Test]
+        public void BuildSkeleton_AnchorProvenance_UsesIndicesConservativelyWhenFlagLengthDiffers()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonBuildRequest request = Request(
+                turnLengthSteps: 8,
+                sourceAnalysis: Analysis(ExplicitFlagsWithAnchorIndices(
+                    flagLength: 4,
+                    explicitAnchorIndices: new[] { 1 },
+                    fallbackAnchorIndices: new[] { 1, 6, 99 })));
+
+            SkeletonPattern pattern = builder.BuildSkeleton(request);
+
+            Assert.That(pattern.StepMeta[1].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[1].IsExplicitAnchor, Is.True);
+            Assert.That(pattern.StepMeta[1].IsFallbackAnchor, Is.False);
+
+            Assert.That(pattern.StepMeta[6].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[6].IsExplicitAnchor, Is.False);
+            Assert.That(pattern.StepMeta[6].IsFallbackAnchor, Is.True);
+
+            Assert.That(pattern.StepMeta[5].SourceAnchor, Is.False);
+            Assert.That(pattern.StepMeta[5].IsExplicitAnchor, Is.False);
+            Assert.That(pattern.StepMeta[5].IsFallbackAnchor, Is.False);
         }
 
         [Test]
@@ -177,7 +240,7 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             SkeletonBuildRequest request = Request(
                 turnLengthSteps: 16,
                 plan: Plan(16, preserveAnchors: true),
-                sourceAnalysis: Analysis(AnchorFlags(16, 4)));
+                sourceAnalysis: Analysis(ExplicitAnchorFlagsOnly(16, 4)));
 
             SkeletonPattern pattern = builder.BuildSkeleton(request);
 
@@ -201,15 +264,28 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
-        public void BuildSkeleton_MetricMap_OrdersHierarchicalPositionsAndMarksStrongBeats()
+        public void BuildSkeleton_EndingProximity_PopulatesStepsFromEnd()
         {
             var builder = new SkeletonBuilder();
 
             SkeletonPattern pattern = builder.BuildSkeleton(Request(turnLengthSteps: 48, stepsPerQuarter: 12));
 
-            Assert.That(pattern.StepMeta[0].MetricScore, Is.GreaterThan(pattern.StepMeta[12].MetricScore));
-            Assert.That(pattern.StepMeta[12].MetricScore, Is.GreaterThan(pattern.StepMeta[6].MetricScore));
-            Assert.That(pattern.StepMeta[6].MetricScore, Is.GreaterThan(pattern.StepMeta[1].MetricScore));
+            Assert.That(pattern.StepMeta[0].StepsFromEnd, Is.EqualTo(47));
+            Assert.That(pattern.StepMeta[24].StepsFromEnd, Is.EqualTo(23));
+            Assert.That(pattern.StepMeta[47].StepsFromEnd, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void BuildSkeleton_MetricMap_OrdersExplicitHierarchyAndMarksStrongBeats()
+        {
+            var builder = new SkeletonBuilder();
+
+            SkeletonPattern pattern = builder.BuildSkeleton(Request(turnLengthSteps: 48, stepsPerQuarter: 12));
+
+            Assert.That(pattern.StepMeta[0].MetricScore, Is.EqualTo(pattern.StepMeta[12].MetricScore));
+            Assert.That(pattern.StepMeta[0].MetricScore, Is.GreaterThan(pattern.StepMeta[6].MetricScore));
+            Assert.That(pattern.StepMeta[6].MetricScore, Is.GreaterThan(pattern.StepMeta[3].MetricScore));
+            Assert.That(pattern.StepMeta[3].MetricScore, Is.GreaterThan(pattern.StepMeta[1].MetricScore));
 
             AssertHasFlag(pattern.StepMeta[0].ReasonFlags, SkeletonReasonFlags.MetricStrong);
             AssertHasFlag(pattern.StepMeta[12].ReasonFlags, SkeletonReasonFlags.MetricStrong);
@@ -217,6 +293,11 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             AssertHasFlag(pattern.StepMeta[36].ReasonFlags, SkeletonReasonFlags.MetricStrong);
             AssertLacksFlag(pattern.StepMeta[6].ReasonFlags, SkeletonReasonFlags.MetricStrong);
             AssertHasFlag(pattern.StepMeta[1].ReasonFlags, SkeletonReasonFlags.MetricWeak);
+
+            Assert.That(pattern.StepMeta[0].IsStrongBeat, Is.True);
+            Assert.That(pattern.StepMeta[12].IsStrongBeat, Is.True);
+            Assert.That(pattern.StepMeta[6].IsStrongBeat, Is.False);
+            Assert.That(pattern.StepMeta[3].IsStrongBeat, Is.False);
         }
 
         [Test]
@@ -231,6 +312,7 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             for (int i = 0; i < request.TurnLengthSteps; i++)
             {
                 Assert.That(second.StepMeta[i].MetricScore, Is.EqualTo(first.StepMeta[i].MetricScore), "Metric score at step {0}", i);
+                Assert.That(second.StepMeta[i].IsStrongBeat, Is.EqualTo(first.StepMeta[i].IsStrongBeat), "Strong beat flag at step {0}", i);
                 Assert.That(second.StepMeta[i].ReasonFlags, Is.EqualTo(first.StepMeta[i].ReasonFlags), "Reason flags at step {0}", i);
             }
         }
@@ -307,30 +389,40 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
                 new SegmentActivityProfileFeatures());
         }
 
-        private static AnchorFeatures AnchorFlags(int stepCount, params int[] anchorIndices)
+        private static AnchorFeatures ExplicitAnchorFlagsOnly(int stepCount, params int[] anchorIndices)
         {
-            var flags = new bool[stepCount];
-            var salience = new float[stepCount];
-            var anchorsPerSegment = new int[4];
+            return ExplicitFlagsWithAnchorIndices(stepCount, anchorIndices, null);
+        }
 
-            for (int i = 0; i < anchorIndices.Length; i++)
+        private static AnchorFeatures ExplicitFlagsWithAnchorIndices(
+            int flagLength,
+            int[] explicitAnchorIndices,
+            int[] fallbackAnchorIndices)
+        {
+            var flags = new bool[flagLength];
+            var salience = new float[flagLength];
+            var anchorsPerSegment = new int[4];
+            int[] explicitAnchors = explicitAnchorIndices ?? new int[0];
+            int[] fallbackAnchors = fallbackAnchorIndices;
+
+            for (int i = 0; i < explicitAnchors.Length; i++)
             {
-                int anchorIndex = anchorIndices[i];
+                int anchorIndex = explicitAnchors[i];
                 flags[anchorIndex] = true;
                 salience[anchorIndex] = 0.75f;
-                anchorsPerSegment[anchorIndex * 4 / stepCount]++;
+                anchorsPerSegment[anchorIndex * 4 / flagLength]++;
             }
 
             return new AnchorFeatures(
-                stepCount,
+                flagLength,
                 salience,
                 flags,
-                anchorIndices.Length,
-                anchorIndices,
-                anchorIndices.Length > 0 ? anchorIndices[0] : (int?)null,
-                anchorIndices.Length > 0 ? 0.75f : 0f,
-                anchorIndices.Length > 0 && anchorIndices[0] == 0,
-                anchorIndices.Length > 0 && anchorIndices[anchorIndices.Length - 1] == stepCount - 1,
+                explicitAnchors.Length,
+                fallbackAnchors,
+                explicitAnchors.Length > 0 ? explicitAnchors[0] : (int?)null,
+                explicitAnchors.Length > 0 ? 0.75f : 0f,
+                explicitAnchors.Length > 0 && explicitAnchors[0] == 0,
+                explicitAnchors.Length > 0 && explicitAnchors[explicitAnchors.Length - 1] == flagLength - 1,
                 anchorsPerSegment);
         }
 

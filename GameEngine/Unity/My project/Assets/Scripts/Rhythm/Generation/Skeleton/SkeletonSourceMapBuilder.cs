@@ -4,6 +4,23 @@ using IT4s.Rhythm.TurnAnalysis.Models;
 
 namespace IT4s.Rhythm.Generation.Skeleton
 {
+    internal sealed class SkeletonSourceAnchorMap
+    {
+        public bool[] CombinedAnchors { get; private set; }
+        public bool[] ExplicitAnchors { get; private set; }
+        public bool[] FallbackAnchors { get; private set; }
+
+        public SkeletonSourceAnchorMap(
+            bool[] combinedAnchors,
+            bool[] explicitAnchors,
+            bool[] fallbackAnchors)
+        {
+            CombinedAnchors = combinedAnchors;
+            ExplicitAnchors = explicitAnchors;
+            FallbackAnchors = fallbackAnchors;
+        }
+    }
+
     internal static class SkeletonSourceMapBuilder
     {
         public static bool[] BuildOccupiedMap(PatternTurn sourceTurn, int turnLengthSteps)
@@ -28,7 +45,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
             return occupied;
         }
 
-        public static bool[] BuildAnchorMap(TurnAnalysisResult sourceAnalysis, int turnLengthSteps)
+        public static SkeletonSourceAnchorMap BuildAnchorMap(TurnAnalysisResult sourceAnalysis, int turnLengthSteps)
         {
             if (sourceAnalysis == null)
                 throw new ArgumentNullException(nameof(sourceAnalysis));
@@ -36,13 +53,21 @@ namespace IT4s.Rhythm.Generation.Skeleton
             if (turnLengthSteps <= 0)
                 throw new ArgumentOutOfRangeException(nameof(turnLengthSteps), "Turn length steps must be greater than zero.");
 
-            var anchors = new bool[turnLengthSteps];
+            var explicitAnchors = new bool[turnLengthSteps];
+            var fallbackAnchors = new bool[turnLengthSteps];
+            var combinedAnchors = new bool[turnLengthSteps];
             AnchorFeatures anchorFeatures = sourceAnalysis.Anchor ?? new AnchorFeatures();
 
-            CopyAnchorFlags(anchorFeatures, anchors);
-            CopyAnchorIndices(anchorFeatures, anchors);
+            CopyAnchorFlags(anchorFeatures, explicitAnchors);
+            CopyAnchorIndices(anchorFeatures, explicitAnchors, fallbackAnchors);
 
-            return anchors;
+            for (int i = 0; i < turnLengthSteps; i++)
+                combinedAnchors[i] = explicitAnchors[i] || fallbackAnchors[i];
+
+            return new SkeletonSourceAnchorMap(
+                combinedAnchors,
+                explicitAnchors,
+                fallbackAnchors);
         }
 
         private static void CopyAnchorFlags(AnchorFeatures anchorFeatures, bool[] anchors)
@@ -55,7 +80,10 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 anchors[i] = anchorFeatures.StepIsAnchor[i];
         }
 
-        private static void CopyAnchorIndices(AnchorFeatures anchorFeatures, bool[] anchors)
+        private static void CopyAnchorIndices(
+            AnchorFeatures anchorFeatures,
+            bool[] explicitAnchors,
+            bool[] fallbackAnchors)
         {
             if (anchorFeatures.AnchorIndices == null)
                 return;
@@ -63,8 +91,11 @@ namespace IT4s.Rhythm.Generation.Skeleton
             for (int i = 0; i < anchorFeatures.AnchorIndices.Count; i++)
             {
                 int anchorIndex = anchorFeatures.AnchorIndices[i];
-                if (anchorIndex >= 0 && anchorIndex < anchors.Length)
-                    anchors[anchorIndex] = true;
+                if (anchorIndex < 0 || anchorIndex >= fallbackAnchors.Length)
+                    continue;
+
+                if (!explicitAnchors[anchorIndex])
+                    fallbackAnchors[anchorIndex] = true;
             }
         }
     }

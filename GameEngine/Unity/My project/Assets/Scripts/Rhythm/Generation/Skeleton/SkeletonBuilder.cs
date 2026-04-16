@@ -56,6 +56,8 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 {
                     StepIndex = i,
                     SegmentIndex = maps.StepToSegment[i],
+                    IsStrongBeat = maps.StrongBeats[i],
+                    StepsFromEnd = maps.StepsFromEnd[i],
                     MetricScore = maps.MetricalSalience[i],
                     SourceRelationScore = 0f,
                     AnchorScore = 0f,
@@ -66,6 +68,8 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     Selected = false,
                     SourceOccupied = maps.SourceOccupied[i],
                     SourceAnchor = sourceAnchor,
+                    IsExplicitAnchor = maps.ExplicitAnchors[i],
+                    IsFallbackAnchor = maps.FallbackAnchors[i],
                     InEndingRegion = maps.EndingRegion[i],
                     Protected = protectedAnchor,
                     ReasonFlags = reasonFlags

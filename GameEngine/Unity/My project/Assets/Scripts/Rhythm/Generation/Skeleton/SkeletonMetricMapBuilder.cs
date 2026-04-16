@@ -2,22 +2,33 @@ using System;
 
 namespace IT4s.Rhythm.Generation.Skeleton
 {
+    internal enum MetricStrengthLevel
+    {
+        Strongest,
+        Strong,
+        Medium,
+        Weak
+    }
+
     internal sealed class SkeletonMetricMap
     {
         public float[] Salience { get; private set; }
         public bool[] StrongBeats { get; private set; }
+        public MetricStrengthLevel[] StrengthLevels { get; private set; }
 
-        public SkeletonMetricMap(float[] salience, bool[] strongBeats)
+        public SkeletonMetricMap(
+            float[] salience,
+            bool[] strongBeats,
+            MetricStrengthLevel[] strengthLevels)
         {
             Salience = salience;
             StrongBeats = strongBeats;
+            StrengthLevels = strengthLevels;
         }
     }
 
     internal static class SkeletonMetricMapBuilder
     {
-        private const int BeatsPerBar = 4;
-
         public static SkeletonMetricMap Build(int turnLengthSteps, int stepsPerQuarter)
         {
             if (turnLengthSteps <= 0)
@@ -28,44 +39,43 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
             var salience = new float[turnLengthSteps];
             var strongBeats = new bool[turnLengthSteps];
+            var strengthLevels = new MetricStrengthLevel[turnLengthSteps];
 
             for (int stepIndex = 0; stepIndex < turnLengthSteps; stepIndex++)
             {
-                salience[stepIndex] = GetMetricalSalience(stepIndex, stepsPerQuarter);
-                strongBeats[stepIndex] = IsStrongBeat(stepIndex, stepsPerQuarter);
+                MetricStrengthLevel strengthLevel = GetStrengthLevel(stepIndex, stepsPerQuarter);
+                strengthLevels[stepIndex] = strengthLevel;
+                salience[stepIndex] = GetMetricalSalience(strengthLevel);
+                strongBeats[stepIndex] = strengthLevel == MetricStrengthLevel.Strongest;
             }
 
-            return new SkeletonMetricMap(salience, strongBeats);
+            return new SkeletonMetricMap(salience, strongBeats, strengthLevels);
         }
 
-        private static float GetMetricalSalience(int stepIndex, int stepsPerQuarter)
+        private static MetricStrengthLevel GetStrengthLevel(int stepIndex, int stepsPerQuarter)
         {
-            int stepsPerBar = stepsPerQuarter * BeatsPerBar;
-
-            if (stepIndex % stepsPerBar == 0)
-                return 1.00f;
-
             if (stepIndex % stepsPerQuarter == 0)
-                return 0.85f;
+                return MetricStrengthLevel.Strongest;
 
             if (IsSubdivision(stepIndex, stepsPerQuarter, 2))
-                return 0.65f;
-
-            if (IsSubdivision(stepIndex, stepsPerQuarter, 3))
-                return 0.55f;
+                return MetricStrengthLevel.Strong;
 
             if (IsSubdivision(stepIndex, stepsPerQuarter, 4))
-                return 0.45f;
+                return MetricStrengthLevel.Medium;
 
-            if (IsSubdivision(stepIndex, stepsPerQuarter, 6))
-                return 0.35f;
-
-            return 0.20f;
+            return MetricStrengthLevel.Weak;
         }
 
-        private static bool IsStrongBeat(int stepIndex, int stepsPerQuarter)
+        private static float GetMetricalSalience(MetricStrengthLevel strengthLevel)
         {
-            return stepIndex % stepsPerQuarter == 0;
+            switch (strengthLevel)
+            {
+                case MetricStrengthLevel.Strongest: return 1.00f;
+                case MetricStrengthLevel.Strong: return 0.75f;
+                case MetricStrengthLevel.Medium: return 0.50f;
+                case MetricStrengthLevel.Weak: return 0.20f;
+                default: throw new ArgumentOutOfRangeException(nameof(strengthLevel), strengthLevel, "Unknown metric strength level.");
+            }
         }
 
         private static bool IsSubdivision(int stepIndex, int stepsPerQuarter, int divisor)
