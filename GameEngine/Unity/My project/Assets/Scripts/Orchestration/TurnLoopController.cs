@@ -3,6 +3,8 @@ using System.Globalization;
 using IT4s.Data;
 using IT4s.Input;
 using IT4s.Rhythm;
+using IT4s.Rhythm.Generation.Skeleton;
+using IT4s.Rhythm.Generation.Skeleton.Models;
 using IT4s.Rhythm.ResponsePlanning;
 using IT4s.Rhythm.ResponsePlanning.Models;
 using IT4s.Rhythm.Transformations;
@@ -101,6 +103,8 @@ namespace IT4s.Orchestration
         private FeatureTransformer featureTransformer;
         private TurnAnalyser turnAnalyser;
         private IResponsePlanner responsePlanner;
+        private ISkeletonBuilder skeletonBuilder;
+        private SkeletonBuilderConfig skeletonBuilderConfig;
         private MusicalTimingConfig currentMusicalTiming;
 
         // Only the controller may change phase. External systems can observe CurrentPhase,
@@ -136,6 +140,8 @@ namespace IT4s.Orchestration
             }
         }
         public bool HasLastResponsePlannerSnapshot => LastResponsePlannerSnapshot != null;
+        public SkeletonDebugSnapshot LastSkeletonDebugSnapshot => runtimeState.LastSkeletonDebugSnapshot;
+        public bool HasLastSkeletonDebugSnapshot => runtimeState.HasLastSkeletonDebugSnapshot;
         public PatternTurn LastGeneratedAiPatternTurn => runtimeState.LastGeneratedAiPatternTurn;
         public bool HasLastGeneratedAiPatternTurn => runtimeState.HasLastGeneratedAiPatternTurn;
         public event Action<TurnPhase> OnPhaseChanged;
@@ -143,6 +149,7 @@ namespace IT4s.Orchestration
         public event Action<PatternTurn> OnHumanPatternCompiled;
         public event Action<TurnAnalysisResult> OnHumanTurnAnalysed;
         public event Action<TurnAnalysisResult, ResponsePlan> OnResponsePlanned;
+        public event Action<SkeletonDebugSnapshot> OnSkeletonGenerated;
         public event Action<PatternTurn> OnAiPatternGenerated;
         public event Action<string> OnDebugMessage;
 
@@ -182,7 +189,9 @@ namespace IT4s.Orchestration
             TurnAnalyser injectedTurnAnalyser,
             IResponsePlanner injectedResponsePlanner,
             MusicalTimingConfig initialTimingConfig,
-            OscHitReceiver injectedHitReceiver = null)
+            OscHitReceiver injectedHitReceiver = null,
+            ISkeletonBuilder injectedSkeletonBuilder = null,
+            SkeletonBuilderConfig injectedSkeletonBuilderConfig = null)
         {
             turnCaptureController = injectedTurnCaptureController;
             hitBuffer = injectedHitBuffer;
@@ -191,6 +200,8 @@ namespace IT4s.Orchestration
             featureTransformer = injectedFeatureTransformer;
             turnAnalyser = injectedTurnAnalyser;
             responsePlanner = injectedResponsePlanner;
+            skeletonBuilder = injectedSkeletonBuilder;
+            skeletonBuilderConfig = injectedSkeletonBuilderConfig;
             hitReceiver = injectedHitReceiver != null ? injectedHitReceiver : hitReceiver;
 
             ResolveReceiverReference();
@@ -384,6 +395,7 @@ namespace IT4s.Orchestration
                 $"featureTransformer={(featureTransformer != null ? "set" : "missing")}, " +
                 $"turnAnalyser={(turnAnalyser != null ? "set" : "missing")}, " +
                 $"responsePlanner={(responsePlanner != null ? "set" : "missing")}, " +
+                $"skeletonBuilder={(skeletonBuilder != null ? "set" : "missing")}, " +
                 $"timing={DescribeTimingState()}.";
         }
 
@@ -497,6 +509,18 @@ namespace IT4s.Orchestration
             if (responsePlanner == null)
             {
                 MoveToError("Turn loop cannot start because IResponsePlanner is missing.");
+                return false;
+            }
+
+            if (skeletonBuilder == null)
+            {
+                MoveToError("Turn loop cannot start because ISkeletonBuilder is missing.");
+                return false;
+            }
+
+            if (skeletonBuilderConfig == null)
+            {
+                MoveToError("Turn loop cannot start because SkeletonBuilderConfig is missing.");
                 return false;
             }
 
@@ -674,7 +698,8 @@ namespace IT4s.Orchestration
                         StoreResponsePlan(plan);
                         EmitDebugMessage(FormatResponsePlanSummary(plan));
                     },
-                    StoreGeneratedAiPattern);
+                    StoreGeneratedAiPattern,
+                    StoreSkeletonDebugSnapshot);
             }
             catch (Exception ex)
             {
@@ -720,16 +745,28 @@ namespace IT4s.Orchestration
 
         private void ClearGeneratedAiResponseState()
         {
-            if (LastGeneratedAiPatternTurn == null && !HasLastGeneratedAiPatternTurn)
+            bool hasGeneratedPattern = LastGeneratedAiPatternTurn != null || HasLastGeneratedAiPatternTurn;
+            bool hasSkeletonSnapshot = LastSkeletonDebugSnapshot != null || HasLastSkeletonDebugSnapshot;
+
+            if (!hasGeneratedPattern && !hasSkeletonSnapshot)
             {
                 return;
             }
 
-            StoreGeneratedAiPattern(null);
+            if (hasSkeletonSnapshot)
+            {
+                StoreSkeletonDebugSnapshot(null);
+            }
+
+            if (hasGeneratedPattern)
+            {
+                StoreGeneratedAiPattern(null);
+            }
         }
 
         private void ClearAnalysisAndPlanningRuntimeState()
         {
+            ClearSkeletonDebugState();
             ClearResponsePlanState();
             ClearAnalysisResultState();
         }
@@ -752,6 +789,16 @@ namespace IT4s.Orchestration
             }
 
             runtimeState.ClearResponsePlanState();
+        }
+
+        private void ClearSkeletonDebugState()
+        {
+            if (LastSkeletonDebugSnapshot == null && !HasLastSkeletonDebugSnapshot)
+            {
+                return;
+            }
+
+            StoreSkeletonDebugSnapshot(null);
         }
 
         private void StoreCapturedTurnWindow(TurnWindow turnWindow)
@@ -783,6 +830,22 @@ namespace IT4s.Orchestration
             if (plan != null)
             {
                 OnResponsePlanned?.Invoke(LastAnalysisResult, plan);
+            }
+        }
+
+        private void StoreSkeletonDebugSnapshot(SkeletonPattern skeletonPattern)
+        {
+            SkeletonDebugSnapshot snapshot = skeletonPattern != null
+                ? new SkeletonDebugSnapshot(skeletonPattern, CurrentResponsePlan)
+                : null;
+
+            runtimeState.SetLastSkeletonDebugSnapshot(snapshot);
+
+            if (snapshot != null)
+            {
+                EmitDebugMessage(
+                    $"Skeleton generated. Steps={snapshot.TurnLengthSteps}, selected={snapshot.SelectedStepCount}, targetDensity={FormatPlanValue(snapshot.TargetDensity)}, achievedDensity={FormatPlanValue(snapshot.AchievedDensity)}.");
+                OnSkeletonGenerated?.Invoke(snapshot);
             }
         }
 
@@ -857,7 +920,12 @@ namespace IT4s.Orchestration
 
         private AiResponsePreparationFlow CreateAiResponsePreparationFlow()
         {
-            return new AiResponsePreparationFlow(turnAnalyser, responsePlanner, featureTransformer);
+            return new AiResponsePreparationFlow(
+                turnAnalyser,
+                responsePlanner,
+                skeletonBuilder,
+                skeletonBuilderConfig,
+                featureTransformer);
         }
 
         private HumanTurnCaptureFlow CreateHumanTurnCaptureFlow()

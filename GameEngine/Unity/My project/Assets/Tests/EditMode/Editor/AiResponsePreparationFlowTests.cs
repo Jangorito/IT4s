@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using IT4s.Data;
 using IT4s.Orchestration;
+using IT4s.Rhythm.Generation.Skeleton;
+using IT4s.Rhythm.Generation.Skeleton.Models;
 using IT4s.Rhythm.ResponsePlanning;
 using IT4s.Rhythm.ResponsePlanning.Models;
 using IT4s.Rhythm.Transformations;
@@ -52,6 +54,47 @@ namespace IT4s.Orchestration.Tests
             Assert.That(result.Analysis, Is.SameAs(callbackAnalysis));
             Assert.That(result.ResponsePlan, Is.SameAs(plannedResponse));
             Assert.That(result.ResponsePlan, Is.SameAs(callbackPlan));
+            Assert.That(result.GeneratedPattern, Is.SameAs(callbackGeneratedPattern));
+            AssertPatternTurnsEqual(new FeatureTransformer().Transform(compiledPattern), result.GeneratedPattern);
+        }
+
+        [Test]
+        public void Prepare_WithSkeletonBuilder_BuildsSkeletonBeforeTemporaryPatternGeneration()
+        {
+            PatternTurn compiledPattern = CreateCompiledPatternTurn();
+            ResponsePlan plannedResponse = CreateResponsePlan(ResponseType.Mirror);
+            var flow = new AiResponsePreparationFlow(
+                CreateTurnAnalyser(),
+                new FixedResponsePlanner(plannedResponse),
+                new SkeletonBuilder(),
+                new SkeletonBuilderConfig(),
+                new FeatureTransformer());
+            var callbackOrder = new List<string>();
+            SkeletonPattern callbackSkeleton = null;
+            PatternTurn callbackGeneratedPattern = null;
+
+            AiResponsePreparationResult result = flow.Prepare(
+                compiledPattern,
+                analysis => callbackOrder.Add("analysed"),
+                plan => callbackOrder.Add("planned"),
+                generatedPattern =>
+                {
+                    callbackOrder.Add("generated");
+                    callbackGeneratedPattern = generatedPattern;
+                },
+                skeleton =>
+                {
+                    callbackOrder.Add("skeleton");
+                    callbackSkeleton = skeleton;
+                });
+
+            CollectionAssert.AreEqual(
+                new[] { "analysed", "planned", "skeleton", "generated" },
+                callbackOrder);
+            Assert.That(result.SkeletonPattern, Is.SameAs(callbackSkeleton));
+            Assert.That(result.SkeletonPattern, Is.Not.Null);
+            Assert.That(result.SkeletonPattern.TurnLengthSteps, Is.EqualTo(plannedResponse.TurnLengthSteps));
+            Assert.That(result.SkeletonPattern.ActiveSteps, Has.Length.EqualTo(plannedResponse.TurnLengthSteps));
             Assert.That(result.GeneratedPattern, Is.SameAs(callbackGeneratedPattern));
             AssertPatternTurnsEqual(new FeatureTransformer().Transform(compiledPattern), result.GeneratedPattern);
         }

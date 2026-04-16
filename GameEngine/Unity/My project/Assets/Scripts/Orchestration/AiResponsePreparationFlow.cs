@@ -1,5 +1,7 @@
 using System;
 using IT4s.Data;
+using IT4s.Rhythm.Generation.Skeleton;
+using IT4s.Rhythm.Generation.Skeleton.Models;
 using IT4s.Rhythm.ResponsePlanning;
 using IT4s.Rhythm.ResponsePlanning.Models;
 using IT4s.Rhythm.Transformations;
@@ -17,15 +19,29 @@ namespace IT4s.Orchestration
     {
         private readonly TurnAnalyser turnAnalyser;
         private readonly IResponsePlanner responsePlanner;
+        private readonly ISkeletonBuilder skeletonBuilder;
+        private readonly SkeletonBuilderConfig skeletonBuilderConfig;
         private readonly FeatureTransformer featureTransformer;
 
         public AiResponsePreparationFlow(
             TurnAnalyser turnAnalyser,
             IResponsePlanner responsePlanner,
             FeatureTransformer featureTransformer)
+            : this(turnAnalyser, responsePlanner, null, null, featureTransformer)
+        {
+        }
+
+        public AiResponsePreparationFlow(
+            TurnAnalyser turnAnalyser,
+            IResponsePlanner responsePlanner,
+            ISkeletonBuilder skeletonBuilder,
+            SkeletonBuilderConfig skeletonBuilderConfig,
+            FeatureTransformer featureTransformer)
         {
             this.turnAnalyser = turnAnalyser;
             this.responsePlanner = responsePlanner;
+            this.skeletonBuilder = skeletonBuilder;
+            this.skeletonBuilderConfig = skeletonBuilderConfig;
             this.featureTransformer = featureTransformer;
         }
 
@@ -33,7 +49,8 @@ namespace IT4s.Orchestration
             PatternTurn compiledPattern,
             Action<TurnAnalysisResult> onAnalysed = null,
             Action<ResponsePlan> onPlanned = null,
-            Action<PatternTurn> onGenerated = null)
+            Action<PatternTurn> onGenerated = null,
+            Action<SkeletonPattern> onSkeletonBuilt = null)
         {
             if (compiledPattern == null)
             {
@@ -67,6 +84,23 @@ namespace IT4s.Orchestration
 
             onPlanned?.Invoke(responsePlan);
 
+            SkeletonPattern skeletonPattern = null;
+            if (skeletonBuilder != null)
+            {
+                if (skeletonBuilderConfig == null)
+                {
+                    throw new InvalidOperationException(
+                        "GeneratingAiResponse failed because SkeletonBuilderConfig reference is missing.");
+                }
+
+                skeletonPattern = ExecuteRequiredStage(
+                    "ISkeletonBuilder.BuildSkeleton",
+                    () => skeletonBuilder.BuildSkeleton(CreateSkeletonBuildRequest(compiledPattern, analysis, responsePlan)),
+                    () => $"ISkeletonBuilder returned null when building a response skeleton for turn {compiledPattern.turnId}.");
+
+                onSkeletonBuilt?.Invoke(skeletonPattern);
+            }
+
             if (featureTransformer == null)
             {
                 throw new InvalidOperationException(
@@ -82,7 +116,25 @@ namespace IT4s.Orchestration
 
             onGenerated?.Invoke(generatedPattern);
 
-            return new AiResponsePreparationResult(analysis, responsePlan, generatedPattern);
+            return new AiResponsePreparationResult(analysis, responsePlan, generatedPattern, skeletonPattern);
+        }
+
+        private SkeletonBuildRequest CreateSkeletonBuildRequest(
+            PatternTurn compiledPattern,
+            TurnAnalysisResult analysis,
+            ResponsePlan responsePlan)
+        {
+            return new SkeletonBuildRequest
+            {
+                Plan = responsePlan,
+                SourceTurn = compiledPattern,
+                SourceAnalysis = analysis,
+                TurnLengthSteps = responsePlan.TurnLengthSteps > 0
+                    ? responsePlan.TurnLengthSteps
+                    : compiledPattern.StepCount,
+                StepsPerQuarter = compiledPattern.stepsPerQuarter,
+                Config = skeletonBuilderConfig
+            };
         }
 
         private static T ExecuteRequiredStage<T>(

@@ -1,4 +1,5 @@
 using IT4s.Data;
+using IT4s.Rhythm.Generation.Skeleton.Models;
 using IT4s.Rhythm.ResponsePlanning.Models;
 using IT4s.Rhythm.TurnAnalysis.Models;
 
@@ -14,15 +15,18 @@ namespace IT4s.Orchestration
         public AiResponsePreparationResult(
             TurnAnalysisResult analysis,
             ResponsePlan responsePlan,
-            PatternTurn generatedPattern)
+            PatternTurn generatedPattern,
+            SkeletonPattern skeletonPattern = null)
         {
             Analysis = analysis;
             ResponsePlan = responsePlan;
             GeneratedPattern = generatedPattern;
+            SkeletonPattern = skeletonPattern;
         }
 
         public TurnAnalysisResult Analysis { get; }
         public ResponsePlan ResponsePlan { get; }
+        public SkeletonPattern SkeletonPattern { get; }
         public PatternTurn GeneratedPattern { get; }
     }
 }

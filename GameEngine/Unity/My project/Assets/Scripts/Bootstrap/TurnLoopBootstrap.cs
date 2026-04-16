@@ -1,6 +1,7 @@
 using IT4s.Input;
 using IT4s.Orchestration;
 using IT4s.Rhythm;
+using IT4s.Rhythm.Generation.Skeleton;
 using IT4s.Rhythm.ResponsePlanning;
 using IT4s.Rhythm.Transformations;
 using IT4s.Rhythm.TurnAnalysis;
@@ -43,6 +44,8 @@ namespace IT4s.Bootstrap
         private FeatureTransformer featureTransformer;
         private TurnAnalyser turnAnalyser;
         private IResponsePlanner responsePlanner;
+        private ISkeletonBuilder skeletonBuilder;
+        private SkeletonBuilderConfig skeletonBuilderConfig;
         private MusicalTimingConfig initialTimingConfig;
 
         private void Awake()
@@ -57,6 +60,8 @@ namespace IT4s.Bootstrap
             featureTransformer = new FeatureTransformer();
             turnAnalyser = CreateTurnAnalyser();
             responsePlanner = new ResponsePlanner();
+            skeletonBuilder = new SkeletonBuilder();
+            skeletonBuilderConfig = new SkeletonBuilderConfig();
 
             initialTimingConfig = new MusicalTimingConfig(
                 bpm,
@@ -81,7 +86,9 @@ namespace IT4s.Bootstrap
                 turnAnalyser,
                 responsePlanner,
                 initialTimingConfig,
-                oscHitReceiver);
+                oscHitReceiver,
+                skeletonBuilder,
+                skeletonBuilderConfig);
 
             Debug.Log($"[TurnLoopBootstrap] Turn loop collaborators wired with timing {initialTimingConfig}.");
         }

@@ -1,4 +1,5 @@
 using IT4s.Data;
+using IT4s.Rhythm.Generation.Skeleton;
 using IT4s.Rhythm.ResponsePlanning.Models;
 using IT4s.Rhythm.TurnAnalysis.Models;
 
@@ -27,6 +28,9 @@ namespace IT4s.Orchestration
 
         public ResponsePlan CurrentResponsePlan { get; private set; }
         public bool HasCurrentResponsePlan { get; private set; }
+
+        public SkeletonDebugSnapshot LastSkeletonDebugSnapshot { get; private set; }
+        public bool HasLastSkeletonDebugSnapshot { get; private set; }
 
         public PatternTurn LastGeneratedAiPatternTurn { get; private set; }
         public bool HasLastGeneratedAiPatternTurn { get; private set; }
@@ -83,6 +87,18 @@ namespace IT4s.Orchestration
         {
             CurrentResponsePlan = null;
             HasCurrentResponsePlan = false;
+        }
+
+        public void SetLastSkeletonDebugSnapshot(SkeletonDebugSnapshot snapshot)
+        {
+            LastSkeletonDebugSnapshot = snapshot;
+            HasLastSkeletonDebugSnapshot = snapshot != null;
+        }
+
+        public void ClearSkeletonDebugSnapshot()
+        {
+            LastSkeletonDebugSnapshot = null;
+            HasLastSkeletonDebugSnapshot = false;
         }
 
         public void SetLastGeneratedAiPatternTurn(PatternTurn pattern)

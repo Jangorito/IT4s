@@ -29,10 +29,12 @@ namespace IT4s.Debugging
         [SerializeField] private PatternTurnDebugRenderer humanPatternRenderer;
         [SerializeField] private PatternTurnDebugRenderer aiPatternRenderer;
         [SerializeField] private ResponsePlannerDebugRenderer responsePlannerRenderer;
+        [SerializeField] private SkeletonDebugRenderer skeletonRenderer;
 
         [Header("Layout")]
         [SerializeField] private bool showDebugUi = true;
         [SerializeField] private bool showResponsePlannerPanel = true;
+        [SerializeField] private bool showSkeletonPanel = true;
         [SerializeField] private bool showAiPatternPanel = false;
         [SerializeField] private float maxPanelWidth = 980f;
         [SerializeField] private Vector2 screenPadding = new Vector2(16f, 16f);
@@ -64,6 +66,7 @@ namespace IT4s.Debugging
             humanPatternRenderer?.SetPanelTitle("HUMAN PATTERN");
             aiPatternRenderer?.SetPanelTitle("AI PATTERN");
             responsePlannerRenderer?.SetTurnLoopController(turnLoopController);
+            skeletonRenderer?.SetTurnLoopController(turnLoopController);
         }
 
         private void OnEnable()
@@ -137,12 +140,35 @@ namespace IT4s.Debugging
             DrawAnalysisPanel(analysisRect);
             y += comparisonHeight + SectionSpacing;
 
-            if (showResponsePlannerPanel && responsePlannerRenderer != null)
+            bool drawPlannerPanel = showResponsePlannerPanel && responsePlannerRenderer != null;
+            bool drawSkeletonPanel = showSkeletonPanel && skeletonRenderer != null;
+
+            if (drawPlannerPanel && drawSkeletonPanel)
+            {
+                float lowerPanelWidth = (width - SplitPanelSpacing) * 0.5f;
+                float plannerHeight = responsePlannerRenderer.GetPreferredHeight(lowerPanelWidth);
+                float skeletonHeight = skeletonRenderer.GetPreferredHeight(lowerPanelWidth);
+                float lowerRowHeight = Mathf.Max(plannerHeight, skeletonHeight);
+
+                Rect plannerRect = new Rect(x, y, lowerPanelWidth, lowerRowHeight);
+                Rect skeletonRect = new Rect(x + lowerPanelWidth + SplitPanelSpacing, y, lowerPanelWidth, lowerRowHeight);
+                responsePlannerRenderer.Draw(plannerRect);
+                skeletonRenderer.Draw(skeletonRect);
+                y += lowerRowHeight + SectionSpacing;
+            }
+            else if (drawPlannerPanel)
             {
                 float plannerHeight = responsePlannerRenderer.GetPreferredHeight(width);
                 Rect plannerRect = new Rect(x, y, width, plannerHeight);
                 responsePlannerRenderer.Draw(plannerRect);
                 y += plannerHeight + SectionSpacing;
+            }
+            else if (drawSkeletonPanel)
+            {
+                float skeletonHeight = skeletonRenderer.GetPreferredHeight(width);
+                Rect skeletonRect = new Rect(x, y, width, skeletonHeight);
+                skeletonRenderer.Draw(skeletonRect);
+                y += skeletonHeight + SectionSpacing;
             }
 
             if (!showAiPatternPanel)
@@ -276,7 +302,18 @@ namespace IT4s.Debugging
                 responsePlannerRenderer = GetComponentInChildren<ResponsePlannerDebugRenderer>(true);
             }
 
+            if (skeletonRenderer == null)
+            {
+                skeletonRenderer = GetComponentInChildren<SkeletonDebugRenderer>(true);
+            }
+
+            if (skeletonRenderer == null)
+            {
+                skeletonRenderer = gameObject.AddComponent<SkeletonDebugRenderer>();
+            }
+
             responsePlannerRenderer?.SetTurnLoopController(turnLoopController);
+            skeletonRenderer?.SetTurnLoopController(turnLoopController);
         }
 
         private void PullExistingControllerState()
