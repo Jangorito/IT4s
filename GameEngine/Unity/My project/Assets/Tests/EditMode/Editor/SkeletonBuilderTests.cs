@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using IT4s.Data;
 using IT4s.Rhythm.Generation.Skeleton;
 using IT4s.Rhythm.Generation.Skeleton.Models;
@@ -79,7 +80,7 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
-        public void BuildSkeleton_ReturnsCorrectlySizedEmptyPattern()
+        public void BuildSkeleton_ReturnsCorrectlySizedSelectedPattern()
         {
             var builder = new SkeletonBuilder();
 
@@ -89,27 +90,26 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             Assert.That(pattern.ActiveSteps, Has.Length.EqualTo(48));
             Assert.That(pattern.SelectionScores, Has.Length.EqualTo(48));
             Assert.That(pattern.StepMeta, Has.Length.EqualTo(48));
-            Assert.That(pattern.SelectedStepIndices, Is.Empty);
+            Assert.That(pattern.SelectedStepIndices, Has.Length.EqualTo(24));
             Assert.That(pattern.SelectionScores[0], Is.Not.EqualTo(0f));
 
             for (int i = 0; i < pattern.TurnLengthSteps; i++)
             {
-                Assert.That(pattern.ActiveSteps[i], Is.False, "Active flag at step {0}", i);
                 Assert.That(pattern.SelectionScores[i], Is.EqualTo(pattern.StepMeta[i].FinalScore), "Selection score at step {0}", i);
                 Assert.That(pattern.StepMeta[i].StepIndex, Is.EqualTo(i), "Step index at {0}", i);
                 Assert.That(pattern.StepMeta[i].SegmentIndex, Is.InRange(0, 3), "Segment index at step {0}", i);
                 Assert.That(pattern.StepMeta[i].StepsFromEnd, Is.EqualTo(pattern.TurnLengthSteps - 1 - i), "Steps from end at step {0}", i);
                 Assert.That(pattern.StepMeta[i].IsStrongBeat, Is.EqualTo(i % 12 == 0), "Strong beat flag at step {0}", i);
-                Assert.That(pattern.StepMeta[i].Selected, Is.False, "Selected flag at step {0}", i);
+                Assert.That(pattern.StepMeta[i].Selected, Is.EqualTo(pattern.ActiveSteps[i]), "Selected flag at step {0}", i);
                 Assert.That(pattern.StepMeta[i].SpacingPenalty, Is.EqualTo(0f), "Spacing penalty at step {0}", i);
                 Assert.That(pattern.StepMeta[i].RawScore, Is.EqualTo(pattern.StepMeta[i].FinalScore), "Raw/final score at step {0}", i);
             }
 
-            Assert.That(pattern.Summary.ActiveCount, Is.EqualTo(0));
-            Assert.That(pattern.Summary.AchievedDensity, Is.EqualTo(0f));
+            Assert.That(pattern.Summary.ActiveCount, Is.EqualTo(24));
+            Assert.That(pattern.Summary.AchievedDensity, Is.EqualTo(0.5f).Within(0.0001f));
             Assert.That(pattern.Summary.SourceOverlapCount, Is.EqualTo(0));
             Assert.That(pattern.Summary.AnchorAlignedCount, Is.EqualTo(0));
-            Assert.That(pattern.Summary.DensityTargetMet, Is.False);
+            Assert.That(pattern.Summary.DensityTargetMet, Is.True);
             Assert.That(pattern.Summary.UsedStochasticTieBreak, Is.False);
         }
 
@@ -647,6 +647,114 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             AssertSameScoreOrdering(first, second);
         }
 
+        [Test]
+        public void BuildSkeleton_Selection_RespectsTargetDensity()
+        {
+            var builder = new SkeletonBuilder();
+
+            bool[] active = builder.BuildSkeleton(
+                SequentialScores(10),
+                SelectionContext(totalSteps: 10, targetDensity: 0.30f, minSpacing: 0));
+
+            Assert.That(CountActive(active), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void BuildSkeleton_Selection_EnforcesMinimumSpacing()
+        {
+            var builder = new SkeletonBuilder();
+
+            bool[] active = builder.BuildSkeleton(
+                SequentialScores(8),
+                SelectionContext(totalSteps: 8, targetDensity: 0.50f, minSpacing: 2));
+
+            Assert.That(CountActive(active), Is.EqualTo(4));
+            AssertMinimumSpacing(active, 2);
+        }
+
+        [Test]
+        public void BuildSkeleton_Selection_PrioritisesExplicitAndFallbackAnchorsUnderTightCapacity()
+        {
+            var builder = new SkeletonBuilder();
+            var scores = new List<StepScore>
+            {
+                Score(0, 10f, SkeletonReasonFlags.MetricStrong, 1f),
+                Score(1, 1f, SkeletonReasonFlags.None, 0.5f),
+                Score(2, 0.5f, SkeletonReasonFlags.None, 0.5f),
+                Score(3, 9f, SkeletonReasonFlags.MetricStrong, 1f)
+            };
+
+            bool[] active = builder.BuildSkeleton(
+                scores,
+                new SkeletonContext
+                {
+                    TotalSteps = 4,
+                    TargetDensity = 0.50f,
+                    MinSpacingSteps = 0,
+                    PreserveAnchors = true,
+                    ExplicitAnchors = new[] { false, false, true, false },
+                    FallbackAnchors = new[] { false, true, false, false }
+                });
+
+            Assert.That(active[2], Is.True, "Explicit anchor should be selected first.");
+            Assert.That(active[1], Is.True, "Fallback anchor should be selected before non-anchors.");
+            Assert.That(active[0], Is.False);
+            Assert.That(active[3], Is.False);
+        }
+
+        [Test]
+        public void BuildSkeleton_Selection_SatisfiesEndingConstraintWhenEnabled()
+        {
+            var builder = new SkeletonBuilder();
+
+            bool[] active = builder.BuildSkeleton(
+                SequentialScores(8),
+                new SkeletonContext
+                {
+                    TotalSteps = 8,
+                    TargetDensity = 0.25f,
+                    MinSpacingSteps = 0,
+                    RequireStrongEnding = true,
+                    EndingWindowSteps = 2
+                });
+
+            Assert.That(CountActive(active), Is.EqualTo(2));
+            Assert.That(active[6] || active[7], Is.True);
+        }
+
+        [Test]
+        public void BuildSkeleton_Selection_DefersWeakStepsUntilNeeded()
+        {
+            var builder = new SkeletonBuilder();
+            var scores = new List<StepScore>
+            {
+                Score(1, 10f, SkeletonReasonFlags.MetricWeak, 0.2f),
+                Score(0, 9f, SkeletonReasonFlags.MetricStrong, 1f),
+                Score(2, 8f, SkeletonReasonFlags.None, 0.5f),
+                Score(3, 7f, SkeletonReasonFlags.None, 0.5f)
+            };
+
+            bool[] active = builder.BuildSkeleton(
+                scores,
+                SelectionContext(totalSteps: 4, targetDensity: 0.25f, minSpacing: 0));
+
+            Assert.That(active[0], Is.True);
+            Assert.That(active[1], Is.False);
+        }
+
+        [Test]
+        public void BuildSkeleton_Selection_IsDeterministicAcrossRuns()
+        {
+            var builder = new SkeletonBuilder();
+            List<StepScore> scores = SequentialScores(12);
+            SkeletonContext context = SelectionContext(totalSteps: 12, targetDensity: 0.50f, minSpacing: 2);
+
+            bool[] first = builder.BuildSkeleton(scores, context);
+            bool[] second = builder.BuildSkeleton(scores, context);
+
+            Assert.That(second, Is.EqualTo(first));
+        }
+
         private static SkeletonBuildRequest Request(
             int turnLengthSteps = 48,
             int stepsPerQuarter = 12,
@@ -817,6 +925,80 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
                 velocities[activeIndices[i]] = 96;
 
             return velocities;
+        }
+
+        private static List<StepScore> SequentialScores(int stepCount)
+        {
+            var scores = new List<StepScore>(stepCount);
+            for (int i = 0; i < stepCount; i++)
+            {
+                bool strong = i % 2 == 0;
+                scores.Add(Score(
+                    i,
+                    stepCount - i,
+                    strong ? SkeletonReasonFlags.MetricStrong : SkeletonReasonFlags.None,
+                    strong ? 1f : 0.5f));
+            }
+
+            return scores;
+        }
+
+        private static StepScore Score(
+            int stepIndex,
+            float score,
+            SkeletonReasonFlags flags,
+            float metricalWeight)
+        {
+            return new StepScore
+            {
+                StepIndex = stepIndex,
+                Score = score,
+                Flags = flags,
+                MetricalWeight = metricalWeight,
+                IsWeakMetrical = (flags & SkeletonReasonFlags.MetricWeak) == SkeletonReasonFlags.MetricWeak
+            };
+        }
+
+        private static SkeletonContext SelectionContext(
+            int totalSteps,
+            float targetDensity,
+            int minSpacing)
+        {
+            return new SkeletonContext
+            {
+                TotalSteps = totalSteps,
+                TargetDensity = targetDensity,
+                MinSpacingSteps = minSpacing
+            };
+        }
+
+        private static int CountActive(bool[] activeSteps)
+        {
+            int count = 0;
+            for (int i = 0; i < activeSteps.Length; i++)
+            {
+                if (activeSteps[i])
+                    count++;
+            }
+
+            return count;
+        }
+
+        private static void AssertMinimumSpacing(bool[] activeSteps, int minSpacing)
+        {
+            for (int left = 0; left < activeSteps.Length; left++)
+            {
+                if (!activeSteps[left])
+                    continue;
+
+                for (int right = left + 1; right < activeSteps.Length; right++)
+                {
+                    if (!activeSteps[right])
+                        continue;
+
+                    Assert.That(right - left, Is.GreaterThanOrEqualTo(minSpacing), "Selected steps {0} and {1}", left, right);
+                }
+            }
         }
 
         private static void AssertSegment(SkeletonPattern pattern, int stepIndex, int expectedSegment)
