@@ -57,9 +57,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
             var fallbackAnchors = new bool[turnLengthSteps];
             var combinedAnchors = new bool[turnLengthSteps];
             AnchorFeatures anchorFeatures = sourceAnalysis.Anchor ?? new AnchorFeatures();
+            // Fallback indices are only trusted inside the same aligned source prefix
+            // used by per-step anchor flags; response-tail indices are left unanchored.
+            int alignedSourcePrefixLength = GetAlignedSourcePrefixLength(anchorFeatures, turnLengthSteps);
 
             CopyAnchorFlags(anchorFeatures, explicitAnchors);
-            CopyAnchorIndices(anchorFeatures, explicitAnchors, fallbackAnchors);
+            CopyAnchorIndices(anchorFeatures, explicitAnchors, fallbackAnchors, alignedSourcePrefixLength);
 
             for (int i = 0; i < turnLengthSteps; i++)
                 combinedAnchors[i] = explicitAnchors[i] || fallbackAnchors[i];
@@ -83,7 +86,8 @@ namespace IT4s.Rhythm.Generation.Skeleton
         private static void CopyAnchorIndices(
             AnchorFeatures anchorFeatures,
             bool[] explicitAnchors,
-            bool[] fallbackAnchors)
+            bool[] fallbackAnchors,
+            int alignedSourcePrefixLength)
         {
             if (anchorFeatures.AnchorIndices == null)
                 return;
@@ -91,12 +95,28 @@ namespace IT4s.Rhythm.Generation.Skeleton
             for (int i = 0; i < anchorFeatures.AnchorIndices.Count; i++)
             {
                 int anchorIndex = anchorFeatures.AnchorIndices[i];
-                if (anchorIndex < 0 || anchorIndex >= fallbackAnchors.Length)
+                if (anchorIndex < 0 ||
+                    anchorIndex >= fallbackAnchors.Length ||
+                    anchorIndex >= alignedSourcePrefixLength)
+                {
                     continue;
+                }
 
                 if (!explicitAnchors[anchorIndex])
                     fallbackAnchors[anchorIndex] = true;
             }
+        }
+
+        private static int GetAlignedSourcePrefixLength(AnchorFeatures anchorFeatures, int turnLengthSteps)
+        {
+            int anchorStepCount = anchorFeatures.StepIsAnchor != null && anchorFeatures.StepIsAnchor.Count > 0
+                ? anchorFeatures.StepIsAnchor.Count
+                : anchorFeatures.StepCount;
+
+            if (anchorStepCount < 0)
+                anchorStepCount = 0;
+
+            return Math.Min(turnLengthSteps, anchorStepCount);
         }
     }
 }

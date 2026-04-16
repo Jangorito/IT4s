@@ -54,6 +54,8 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
         private static MetricStrengthLevel GetStrengthLevel(int stepIndex, int stepsPerQuarter)
         {
+            // Step indices are 0-based: step 0 is assumed to be aligned to the
+            // response turn's metrical start, so modulo hierarchy grows from that grid origin.
             if (stepIndex % stepsPerQuarter == 0)
                 return MetricStrengthLevel.Strongest;
 

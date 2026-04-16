@@ -186,6 +186,30 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
+        public void BuildSkeleton_AnchorIndices_IgnoresNegativeAndOutOfRangeFallbackValues()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonBuildRequest request = Request(
+                turnLengthSteps: 8,
+                sourceAnalysis: Analysis(AnchorIndicesOnly(8, -1, 2, 8)));
+
+            SkeletonPattern pattern = builder.BuildSkeleton(request);
+
+            Assert.That(pattern.StepMeta[2].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[2].IsExplicitAnchor, Is.False);
+            Assert.That(pattern.StepMeta[2].IsFallbackAnchor, Is.True);
+
+            for (int i = 0; i < pattern.TurnLengthSteps; i++)
+            {
+                if (i == 2)
+                    continue;
+
+                Assert.That(pattern.StepMeta[i].SourceAnchor, Is.False, "Unexpected anchor at step {0}", i);
+                Assert.That(pattern.StepMeta[i].IsFallbackAnchor, Is.False, "Unexpected fallback anchor at step {0}", i);
+            }
+        }
+
+        [Test]
         public void BuildSkeleton_AnchorProvenance_PreservesExplicitAndFallbackSources()
         {
             var builder = new SkeletonBuilder();
@@ -208,15 +232,12 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
-        public void BuildSkeleton_AnchorProvenance_UsesIndicesConservativelyWhenFlagLengthDiffers()
+        public void BuildSkeleton_ExplicitAnchorFlags_TruncatesWhenLongerThanResponse()
         {
             var builder = new SkeletonBuilder();
             SkeletonBuildRequest request = Request(
-                turnLengthSteps: 8,
-                sourceAnalysis: Analysis(ExplicitFlagsWithAnchorIndices(
-                    flagLength: 4,
-                    explicitAnchorIndices: new[] { 1 },
-                    fallbackAnchorIndices: new[] { 1, 6, 99 })));
+                turnLengthSteps: 4,
+                sourceAnalysis: Analysis(ExplicitAnchorFlagsOnly(8, 1, 6)));
 
             SkeletonPattern pattern = builder.BuildSkeleton(request);
 
@@ -224,9 +245,35 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             Assert.That(pattern.StepMeta[1].IsExplicitAnchor, Is.True);
             Assert.That(pattern.StepMeta[1].IsFallbackAnchor, Is.False);
 
-            Assert.That(pattern.StepMeta[6].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[0].SourceAnchor, Is.False);
+            Assert.That(pattern.StepMeta[2].SourceAnchor, Is.False);
+            Assert.That(pattern.StepMeta[3].SourceAnchor, Is.False);
+        }
+
+        [Test]
+        public void BuildSkeleton_AnchorProvenance_ConstrainsFallbackToAlignedPrefixWhenFlagLengthDiffers()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonBuildRequest request = Request(
+                turnLengthSteps: 8,
+                sourceAnalysis: Analysis(ExplicitFlagsWithAnchorIndices(
+                    flagLength: 4,
+                    explicitAnchorIndices: new[] { 1 },
+                    fallbackAnchorIndices: new[] { 1, 2, 6, 99 })));
+
+            SkeletonPattern pattern = builder.BuildSkeleton(request);
+
+            Assert.That(pattern.StepMeta[1].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[1].IsExplicitAnchor, Is.True);
+            Assert.That(pattern.StepMeta[1].IsFallbackAnchor, Is.False);
+
+            Assert.That(pattern.StepMeta[2].SourceAnchor, Is.True);
+            Assert.That(pattern.StepMeta[2].IsExplicitAnchor, Is.False);
+            Assert.That(pattern.StepMeta[2].IsFallbackAnchor, Is.True);
+
+            Assert.That(pattern.StepMeta[6].SourceAnchor, Is.False);
             Assert.That(pattern.StepMeta[6].IsExplicitAnchor, Is.False);
-            Assert.That(pattern.StepMeta[6].IsFallbackAnchor, Is.True);
+            Assert.That(pattern.StepMeta[6].IsFallbackAnchor, Is.False);
 
             Assert.That(pattern.StepMeta[5].SourceAnchor, Is.False);
             Assert.That(pattern.StepMeta[5].IsExplicitAnchor, Is.False);
@@ -276,7 +323,7 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
-        public void BuildSkeleton_MetricMap_OrdersExplicitHierarchyAndMarksStrongBeats()
+        public void BuildSkeleton_MetricMap_TreatsStepZeroAsStrongestGridOriginAndWouldCatchShift()
         {
             var builder = new SkeletonBuilder();
 
@@ -295,8 +342,10 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             AssertHasFlag(pattern.StepMeta[1].ReasonFlags, SkeletonReasonFlags.MetricWeak);
 
             Assert.That(pattern.StepMeta[0].IsStrongBeat, Is.True);
+            Assert.That(pattern.StepMeta[1].IsStrongBeat, Is.False);
             Assert.That(pattern.StepMeta[12].IsStrongBeat, Is.True);
             Assert.That(pattern.StepMeta[6].IsStrongBeat, Is.False);
+            Assert.That(pattern.StepMeta[11].IsStrongBeat, Is.False);
             Assert.That(pattern.StepMeta[3].IsStrongBeat, Is.False);
         }
 
