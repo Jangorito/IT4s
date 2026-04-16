@@ -20,8 +20,8 @@ namespace IT4s.Debugging
         private const float SectionSpacing = 9f;
         private const float ColumnSpacing = 16f;
         private const float ScoreNameWidth = 150f;
-        private const float ScoreGroupMargin = 0.5f;
-        private const float MinimumHeight = 520f;
+        private const float ScoreMidMargin = 1f;
+        private const float MinimumHeight = 550f;
 
         private static readonly ResponseType[] ResponseTypes =
         {
@@ -33,12 +33,19 @@ namespace IT4s.Debugging
             ResponseType.Fill
         };
 
+        private enum ScoreGroup
+        {
+            High,
+            Mid,
+            Low
+        }
+
         [Header("Source")]
         [SerializeField] private TurnLoopController turnLoopController;
 
         [Header("Content")]
         [SerializeField] private bool drawStandalone;
-        [SerializeField] private Rect standaloneRect = new Rect(16f, 400f, 460f, 520f);
+        [SerializeField] private Rect standaloneRect = new Rect(16f, 400f, 460f, 550f);
 
         [Header("Colours")]
         [SerializeField] private Color panelBackground = new Color(0.10f, 0.10f, 0.10f, 0.94f);
@@ -182,9 +189,10 @@ namespace IT4s.Debugging
             GUI.Label(new Rect(contentRect.x, y, contentRect.width, SectionTitleHeight), "RESPONSE TYPE SCORES", sectionStyle);
             y += SectionTitleHeight;
 
-            float selectedScore = GetScore(snapshot, snapshot.SelectedResponseType);
-            y = DrawScoreGroup(contentRect, y, snapshot, selectedScore, "HIGH", true);
-            y = DrawScoreGroup(contentRect, y, snapshot, selectedScore, "LOW", false);
+            ResponseType topResponseType = GetTopScoringType(snapshot, out float topScore);
+            y = DrawScoreGroup(contentRect, y, snapshot, topResponseType, topScore, "HIGH", ScoreGroup.High);
+            y = DrawScoreGroup(contentRect, y, snapshot, topResponseType, topScore, "MID", ScoreGroup.Mid);
+            y = DrawScoreGroup(contentRect, y, snapshot, topResponseType, topScore, "LOW", ScoreGroup.Low);
 
             return y;
         }
@@ -214,6 +222,12 @@ namespace IT4s.Debugging
                 new Rect(contentRect.x, y, contentRect.width, RowHeight),
                 "Selected",
                 $"{snapshot.SelectedResponseType} ({FormatFloat(selectedScore)})");
+            y += RowHeight;
+
+            DrawField(
+                new Rect(contentRect.x, y, contentRect.width, RowHeight),
+                "Decision Context",
+                BuildDecisionContext(snapshot));
             return y + RowHeight;
         }
 
@@ -221,9 +235,10 @@ namespace IT4s.Debugging
             Rect contentRect,
             float y,
             ResponsePlannerDebugSnapshot snapshot,
-            float selectedScore,
+            ResponseType topResponseType,
+            float topScore,
             string groupLabel,
-            bool drawHighGroup)
+            ScoreGroup targetGroup)
         {
             GUI.Label(new Rect(contentRect.x, y, contentRect.width, SectionTitleHeight), groupLabel, sectionStyle);
             y += SectionTitleHeight;
@@ -233,9 +248,8 @@ namespace IT4s.Debugging
             {
                 ResponseType responseType = ResponseTypes[i];
                 float score = GetScore(snapshot, responseType);
-                bool isHighScore = score >= selectedScore - ScoreGroupMargin;
 
-                if (isHighScore != drawHighGroup)
+                if (GetScoreGroup(responseType, score, topResponseType, topScore) != targetGroup)
                 {
                     continue;
                 }
@@ -350,6 +364,22 @@ namespace IT4s.Debugging
             return topResponseType;
         }
 
+        private static ScoreGroup GetScoreGroup(
+            ResponseType responseType,
+            float score,
+            ResponseType topResponseType,
+            float topScore)
+        {
+            if (responseType == topResponseType)
+            {
+                return ScoreGroup.High;
+            }
+
+            return topScore - score <= ScoreMidMargin
+                ? ScoreGroup.Mid
+                : ScoreGroup.Low;
+        }
+
         private static string InferOverrideReason(ResponsePlannerDescriptorSummary descriptor)
         {
             if (descriptor == null)
@@ -373,6 +403,95 @@ namespace IT4s.Debugging
             }
 
             return "rule preference";
+        }
+
+        private static string BuildDecisionContext(ResponsePlannerDebugSnapshot snapshot)
+        {
+            ResponsePlannerDescriptorSummary descriptor = snapshot.SourceDescriptorSummary;
+
+            string density = GetDensityDescriptor(descriptor);
+            string energy = GetEnergyDescriptor(descriptor);
+            string profile = GetProfileLabel(descriptor).ToLowerInvariant();
+            string ending = GetEndingDescriptor(descriptor);
+            string preference = GetPreferenceDescriptor(snapshot.SelectedResponseType);
+
+            return $"{density} input + {energy} energy + {profile} profile + {ending} ending -> {preference}";
+        }
+
+        private static string GetDensityDescriptor(ResponsePlannerDescriptorSummary descriptor)
+        {
+            if (descriptor == null)
+            {
+                return "neutral";
+            }
+
+            if (descriptor.IsSparse)
+            {
+                return "sparse";
+            }
+
+            if (descriptor.IsBusy)
+            {
+                return "busy";
+            }
+
+            return descriptor.IsBalancedDensity ? "balanced" : "neutral";
+        }
+
+        private static string GetEnergyDescriptor(ResponsePlannerDescriptorSummary descriptor)
+        {
+            if (descriptor == null)
+            {
+                return "neutral";
+            }
+
+            if (descriptor.IsLowEnergy)
+            {
+                return "low";
+            }
+
+            if (descriptor.IsHighEnergy)
+            {
+                return "high";
+            }
+
+            return descriptor.IsMediumEnergy ? "medium" : "neutral";
+        }
+
+        private static string GetEndingDescriptor(ResponsePlannerDescriptorSummary descriptor)
+        {
+            if (descriptor == null)
+            {
+                return "unknown";
+            }
+
+            if (descriptor.EndingIsOpen)
+            {
+                return "open";
+            }
+
+            return descriptor.HasStrongEnding ? "strong" : "weak";
+        }
+
+        private static string GetPreferenceDescriptor(ResponseType responseType)
+        {
+            switch (responseType)
+            {
+                case ResponseType.Mirror:
+                    return "mirroring preferred";
+                case ResponseType.Complement:
+                    return "complement preferred";
+                case ResponseType.Simplify:
+                    return "simplification preferred";
+                case ResponseType.Intensify:
+                    return "intensification preferred";
+                case ResponseType.Contrast:
+                    return "contrast preferred";
+                case ResponseType.Fill:
+                    return "fill preferred";
+                default:
+                    return "response preferred";
+            }
         }
 
         private static string GetProfileLabel(ResponsePlannerDescriptorSummary descriptor)
