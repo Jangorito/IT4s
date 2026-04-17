@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using IT4s.Rhythm.ResponsePlanning.Models;
 
 namespace IT4s.Rhythm.Generation.Skeleton
 {
@@ -14,12 +15,14 @@ namespace IT4s.Rhythm.Generation.Skeleton
         public int EndingWindowSteps { get; set; }
         public bool RebalanceAcrossSegments { get; set; }
         public float DensityTolerance { get; set; }
+        public ResponseType ResponseType { get; set; }
 
         public bool[] ExplicitAnchors { get; set; }
         public bool[] FallbackAnchors { get; set; }
         public bool[] EndingSteps { get; set; }
         public bool[] WeakMetricalSteps { get; set; }
         public float[] MetricalWeights { get; set; }
+        public float[] SourceRelationScores { get; set; }
         public int[] SegmentByStep { get; set; }
         public IReadOnlyList<int> ForcedEndingSteps
         {
@@ -77,6 +80,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
         {
             get { return RequireStrongEnding; }
             set { RequireStrongEnding = value; }
+        }
+
+        public ResponseType responseType
+        {
+            get { return ResponseType; }
+            set { ResponseType = value; }
         }
     }
 }

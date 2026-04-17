@@ -10,6 +10,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
         public float Score { get; set; }
         public SkeletonReasonFlags Flags { get; set; }
         public float MetricalWeight { get; set; }
+        public float SourceRelationScore { get; set; }
         public bool IsExplicitAnchor { get; set; }
         public bool IsFallbackAnchor { get; set; }
         public bool InEndingRegion { get; set; }
@@ -32,6 +33,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
         {
             get { return Flags; }
             set { Flags = value; }
+        }
+
+        public float sourceRelationScore
+        {
+            get { return SourceRelationScore; }
+            set { SourceRelationScore = value; }
         }
     }
 }

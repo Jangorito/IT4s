@@ -8,8 +8,6 @@ namespace IT4s.Rhythm.Generation.Skeleton
     public sealed class SkeletonBuilder : ISkeletonBuilder
     {
         private const float MetricWeakThreshold = 0.35f;
-        private const float SourceRelationScale = 0.25f;
-        private const float SourceRelationMaxMagnitude = 0.30f;
         private const float AnchorExplicitScale = 0.42f;
         private const float AnchorFallbackScale = 0.30f;
         private const float AnchorMaxMagnitude = 0.50f;
@@ -140,6 +138,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     maps.StepToSegment[i]);
                 float densityShapingScore = ScoreDensityShaping(
                     request.Plan,
+                    request.Config,
                     maps.MetricStrengthLevels[i]);
                 float spacingPenalty = 0f;
                 float jitterOffset = ScoreJitter(
@@ -229,6 +228,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     Score = meta.FinalScore,
                     Flags = meta.ReasonFlags,
                     MetricalWeight = meta.MetricScore,
+                    SourceRelationScore = meta.SourceRelationScore,
                     IsExplicitAnchor = meta.IsExplicitAnchor,
                     IsFallbackAnchor = meta.IsFallbackAnchor,
                     InEndingRegion = meta.InEndingRegion,
@@ -249,6 +249,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
             var endingSteps = new bool[stepMeta.Length];
             var weakMetricalSteps = new bool[stepMeta.Length];
             var metricalWeights = new float[stepMeta.Length];
+            var sourceRelationScores = new float[stepMeta.Length];
             var segmentByStep = new int[stepMeta.Length];
 
             for (int i = 0; i < stepMeta.Length; i++)
@@ -258,11 +259,13 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 endingSteps[i] = stepMeta[i].InEndingRegion;
                 weakMetricalSteps[i] = HasFlag(stepMeta[i].ReasonFlags, SkeletonReasonFlags.MetricWeak);
                 metricalWeights[i] = stepMeta[i].MetricScore;
+                sourceRelationScores[i] = stepMeta[i].SourceRelationScore;
                 segmentByStep[i] = stepMeta[i].SegmentIndex;
             }
 
             return new SkeletonContext
             {
+                ResponseType = request.Plan.ResponseType,
                 TargetDensity = request.Plan.TargetDensity,
                 TotalSteps = request.TurnLengthSteps,
                 MinSpacingSteps = request.Config.MinimumStepSpacing,
@@ -276,6 +279,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 EndingSteps = endingSteps,
                 WeakMetricalSteps = weakMetricalSteps,
                 MetricalWeights = metricalWeights,
+                SourceRelationScores = sourceRelationScores,
                 SegmentByStep = segmentByStep
             };
         }
@@ -299,11 +303,13 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 ValidateFinite(stepScore.Score, nameof(stepScore.Score));
 
                 float metricalWeight = ResolveMetricalWeight(stepScore, context, stepIndex);
+                float sourceRelationScore = ResolveSourceRelationScore(stepScore, context, stepIndex);
 
                 candidates.Add(new SelectionCandidate(
                     stepIndex,
                     stepScore.Score,
                     metricalWeight,
+                    sourceRelationScore,
                     ResolveAnchorPriority(stepScore, context, stepIndex),
                     ResolveEndingRegion(stepScore, context, stepIndex),
                     ResolveWeakMetrical(stepScore, context, stepIndex, metricalWeight),
@@ -475,7 +481,33 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 return false;
             }
 
-            return CountSelectableNonWeakCandidates(candidates, state, minSpacing) >= slotsRemaining;
+            switch (context.ResponseType)
+            {
+                case ResponseType.Simplify:
+                    return true;
+
+                case ResponseType.Mirror:
+                    return candidate.SourceRelationScore < 0.15f;
+
+                case ResponseType.Complement:
+                    return candidate.SourceRelationScore < 0.20f;
+
+                case ResponseType.Fill:
+                    return false;
+
+                case ResponseType.Contrast:
+                    float bestNonWeakScore = GetBestSelectableNonWeakScore(candidates, state, minSpacing);
+                    if (float.IsNegativeInfinity(bestNonWeakScore))
+                        return false;
+
+                    return candidate.Score < bestNonWeakScore + 0.05f;
+
+                case ResponseType.Intensify:
+                    return state.SelectedCount < targetCount * 0.5f;
+
+                default:
+                    return true;
+            }
         }
 
         private static bool ShouldDeferForSegmentBalance(
@@ -671,6 +703,24 @@ namespace IT4s.Rhythm.Generation.Skeleton
             return count;
         }
 
+        private static float GetBestSelectableNonWeakScore(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int minSpacing)
+        {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                SelectionCandidate candidate = candidates[i];
+                if (!candidate.IsWeakMetrical &&
+                    CandidatePassesBaseConstraints(candidate, state, minSpacing))
+                {
+                    return candidate.Score;
+                }
+            }
+
+            return float.NegativeInfinity;
+        }
+
         private static int CountSelectableCandidates(
             List<SelectionCandidate> candidates,
             SelectionState state,
@@ -790,6 +840,21 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 return 0.20f;
 
             return 0f;
+        }
+
+        private static float ResolveSourceRelationScore(
+            StepScore stepScore,
+            SkeletonContext context,
+            int stepIndex)
+        {
+            if (HasValue(context.SourceRelationScores, stepIndex))
+            {
+                ValidateFinite(context.SourceRelationScores[stepIndex], nameof(context.SourceRelationScores));
+                return context.SourceRelationScores[stepIndex];
+            }
+
+            ValidateFinite(stepScore.SourceRelationScore, nameof(stepScore.SourceRelationScore));
+            return stepScore.SourceRelationScore;
         }
 
         private static AnchorPriority ResolveAnchorPriority(
@@ -1007,50 +1072,74 @@ namespace IT4s.Rhythm.Generation.Skeleton
         {
             float complementarity = Clamp01(plan.ComplementarityBias);
             bool sourceRelated = sourceOccupied || sourceAnchor;
+            float rawScore;
 
             switch (plan.ResponseType)
             {
                 case ResponseType.Mirror:
-                    return ClampMagnitude(
-                        config.MirrorWeight * SourceRelationScale *
-                        (sourceOccupied ? 1f : (sourceAnchor ? 0.55f : -0.06f * complementarity)),
-                        SourceRelationMaxMagnitude);
+                    rawScore = config.MirrorWeight *
+                               (sourceOccupied ? 1f : (sourceAnchor ? 0.55f : -0.06f * complementarity));
+                    break;
 
                 case ResponseType.Complement:
-                    return ClampMagnitude(
-                        config.ComplementWeight * SourceRelationScale *
-                        (sourceOccupied ? (-0.25f - 0.15f * complementarity) : (0.70f + 0.10f * complementarity)),
-                        SourceRelationMaxMagnitude);
+                    rawScore = config.ComplementWeight *
+                               (sourceOccupied ? (-0.25f - 0.15f * complementarity) : (0.70f + 0.10f * complementarity));
+                    break;
 
                 case ResponseType.Simplify:
-                    return ClampMagnitude(
-                        config.MirrorWeight * SourceRelationScale *
-                        (sourceRelated ? 0.40f : 0.08f * complementarity),
-                        SourceRelationMaxMagnitude);
+                    rawScore = config.MirrorWeight *
+                               (sourceRelated ? 0.40f : 0.08f * complementarity);
+                    break;
 
                 case ResponseType.Intensify:
-                    return ClampMagnitude(
-                        SourceRelationScale *
-                        (sourceRelated
-                            ? config.MirrorWeight * 0.60f
-                            : config.ComplementWeight * (0.22f + 0.18f * complementarity)),
-                        SourceRelationMaxMagnitude);
+                    rawScore = sourceRelated
+                        ? config.MirrorWeight * 0.60f
+                        : config.ComplementWeight * (0.22f + 0.18f * complementarity);
+                    break;
 
                 case ResponseType.Contrast:
-                    return ClampMagnitude(
-                        config.ComplementWeight * SourceRelationScale *
-                        (sourceOccupied ? -0.30f : (0.50f + 0.20f * complementarity)),
-                        SourceRelationMaxMagnitude);
+                    rawScore = config.ComplementWeight *
+                               (sourceOccupied ? -0.30f : (0.50f + 0.20f * complementarity));
+                    break;
 
                 case ResponseType.Fill:
                     float interstitialSupport = isStrongBeat ? 0.18f : 0.50f + (1f - metricSalience) * 0.20f;
-                    return ClampMagnitude(
-                        config.ComplementWeight * SourceRelationScale *
-                        (sourceOccupied ? -0.12f : interstitialSupport + complementarity * 0.15f),
-                        SourceRelationMaxMagnitude);
+                    rawScore = config.ComplementWeight *
+                               (sourceOccupied ? -0.12f : interstitialSupport + complementarity * 0.15f);
+                    break;
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(plan.ResponseType), plan.ResponseType, "Unknown response type.");
+            }
+
+            rawScore *= GetSourceRelationResponseTypeMultiplier(plan.ResponseType);
+            float scaled = rawScore * config.SourceRelationScale;
+
+            return SanitizeScore(ClampMagnitude(scaled, config.SourceRelationMaxMagnitude));
+        }
+
+        private static float GetSourceRelationResponseTypeMultiplier(ResponseType responseType)
+        {
+            switch (responseType)
+            {
+                case ResponseType.Mirror:
+                    return 1.2f;
+
+                case ResponseType.Complement:
+                    return 1.25f;
+
+                case ResponseType.Fill:
+                case ResponseType.Contrast:
+                    return 1.3f;
+
+                case ResponseType.Simplify:
+                    return 0.85f;
+
+                case ResponseType.Intensify:
+                    return 1.1f;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
             }
         }
 
@@ -1146,37 +1235,91 @@ namespace IT4s.Rhythm.Generation.Skeleton
             }
         }
 
-        private static float ScoreDensityShaping(ResponsePlan plan, MetricStrengthLevel strengthLevel)
+        private static float ScoreDensityShaping(
+            ResponsePlan plan,
+            SkeletonBuilderConfig config,
+            MetricStrengthLevel strengthLevel)
         {
             float targetDensity = Clamp01(plan.TargetDensity);
+            float score = 0f;
 
             if (targetDensity < 0.35f)
             {
                 float lowAmount = (0.35f - targetDensity) / 0.35f;
                 switch (strengthLevel)
                 {
-                    case MetricStrengthLevel.Strongest: return ClampMagnitude(0.08f * lowAmount, DensityShapingMaxMagnitude);
-                    case MetricStrengthLevel.Strong: return ClampMagnitude(0.03f * lowAmount, DensityShapingMaxMagnitude);
-                    case MetricStrengthLevel.Medium: return 0f;
-                    case MetricStrengthLevel.Weak: return ClampMagnitude(-0.03f * lowAmount, DensityShapingMaxMagnitude);
+                    case MetricStrengthLevel.Strongest:
+                        score = 0.08f * lowAmount;
+                        break;
+
+                    case MetricStrengthLevel.Strong:
+                        score = 0.03f * lowAmount;
+                        break;
+
+                    case MetricStrengthLevel.Medium:
+                        score = 0f;
+                        break;
+
+                    case MetricStrengthLevel.Weak:
+                        score = -0.03f * lowAmount;
+                        break;
+
                     default: throw new ArgumentOutOfRangeException(nameof(strengthLevel), strengthLevel, "Unknown metric strength level.");
                 }
             }
-
-            if (targetDensity > 0.65f)
+            else if (targetDensity > 0.65f)
             {
                 float highAmount = (targetDensity - 0.65f) / 0.35f;
                 switch (strengthLevel)
                 {
-                    case MetricStrengthLevel.Strongest: return 0f;
-                    case MetricStrengthLevel.Strong: return ClampMagnitude(0.02f * highAmount, DensityShapingMaxMagnitude);
-                    case MetricStrengthLevel.Medium: return ClampMagnitude(0.04f * highAmount, DensityShapingMaxMagnitude);
-                    case MetricStrengthLevel.Weak: return ClampMagnitude(0.05f * highAmount, DensityShapingMaxMagnitude);
+                    case MetricStrengthLevel.Strongest:
+                        score = 0f;
+                        break;
+
+                    case MetricStrengthLevel.Strong:
+                        score = 0.02f * highAmount;
+                        break;
+
+                    case MetricStrengthLevel.Medium:
+                        score = config.HighDensityMediumBoost * highAmount;
+                        break;
+
+                    case MetricStrengthLevel.Weak:
+                        score = config.HighDensityWeakBoost * highAmount;
+                        break;
+
                     default: throw new ArgumentOutOfRangeException(nameof(strengthLevel), strengthLevel, "Unknown metric strength level.");
                 }
             }
 
-            return 0f;
+            switch (plan.ResponseType)
+            {
+                case ResponseType.Fill:
+                    if (strengthLevel == MetricStrengthLevel.Weak ||
+                        strengthLevel == MetricStrengthLevel.Medium)
+                    {
+                        score += 0.04f;
+                    }
+
+                    break;
+
+                case ResponseType.Contrast:
+                    if (strengthLevel != MetricStrengthLevel.Strongest)
+                        score += 0.03f;
+                    break;
+
+                case ResponseType.Intensify:
+                    if (targetDensity > 0.6f && strengthLevel == MetricStrengthLevel.Medium)
+                        score += 0.025f;
+                    break;
+
+                case ResponseType.Simplify:
+                    if (strengthLevel != MetricStrengthLevel.Strongest)
+                        score -= 0.03f;
+                    break;
+            }
+
+            return SanitizeScore(ClampMagnitude(score, DensityShapingMaxMagnitude));
         }
 
         private static float ScoreJitter(
@@ -1297,6 +1440,10 @@ namespace IT4s.Rhythm.Generation.Skeleton
             ValidateNonNegativeFinite(config.AnchorInfluenceWeight, nameof(config.AnchorInfluenceWeight));
             ValidateNonNegativeFinite(config.EndingInfluenceWeight, nameof(config.EndingInfluenceWeight));
             ValidateNonNegativeFinite(config.StrongBeatPreferenceWeight, nameof(config.StrongBeatPreferenceWeight));
+            ValidateNonNegativeFinite(config.SourceRelationScale, nameof(config.SourceRelationScale));
+            ValidateNonNegativeFinite(config.SourceRelationMaxMagnitude, nameof(config.SourceRelationMaxMagnitude));
+            ValidateNonNegativeFinite(config.HighDensityWeakBoost, nameof(config.HighDensityWeakBoost));
+            ValidateNonNegativeFinite(config.HighDensityMediumBoost, nameof(config.HighDensityMediumBoost));
             ValidateNonNegativeFinite(config.DensityTolerance, nameof(config.DensityTolerance));
             ValidateNonNegativeFinite(config.SelectionJitter, nameof(config.SelectionJitter));
 
@@ -1353,6 +1500,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 int stepIndex,
                 float score,
                 float metricalWeight,
+                float sourceRelationScore,
                 AnchorPriority anchorPriority,
                 bool inEndingRegion,
                 bool isWeakMetrical,
@@ -1361,6 +1509,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 StepIndex = stepIndex;
                 Score = score;
                 MetricalWeight = metricalWeight;
+                SourceRelationScore = sourceRelationScore;
                 AnchorPriority = anchorPriority;
                 InEndingRegion = inEndingRegion;
                 IsWeakMetrical = isWeakMetrical;
@@ -1370,6 +1519,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
             public int StepIndex { get; private set; }
             public float Score { get; private set; }
             public float MetricalWeight { get; private set; }
+            public float SourceRelationScore { get; private set; }
             public AnchorPriority AnchorPriority { get; private set; }
             public bool InEndingRegion { get; private set; }
             public bool IsWeakMetrical { get; private set; }
