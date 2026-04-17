@@ -34,10 +34,14 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 request.SourceAnalysis,
                 request.TurnLengthSteps,
                 request.StepsPerQuarter);
+            ResponseBehaviourProfile profile = ResponseBehaviourProfileFactory.Build(
+                request.Plan,
+                request.Config,
+                maps);
 
-            SkeletonStepMeta[] stepMeta = BuildStepMeta(request, maps);
+            SkeletonStepMeta[] stepMeta = BuildStepMeta(request, maps, profile);
             List<StepScore> scoredSteps = BuildScoredSteps(stepMeta);
-            SkeletonContext selectionContext = BuildSelectionContext(request, stepMeta);
+            SkeletonContext selectionContext = BuildSelectionContext(request, maps, stepMeta, profile);
             bool[] activeSteps = BuildSkeleton(scoredSteps, selectionContext);
             ApplySelectionToStepMeta(
                 stepMeta,
@@ -97,13 +101,15 @@ namespace IT4s.Rhythm.Generation.Skeleton
             }
 
             EnsureEndingSelection(candidates, context, state, targetCount);
+            EnsureBehaviourProfileSelection(candidates, context, state, targetCount);
 
             return state.ActiveSteps;
         }
 
         private static SkeletonStepMeta[] BuildStepMeta(
             SkeletonBuildRequest request,
-            SkeletonDerivedMaps maps)
+            SkeletonDerivedMaps maps,
+            ResponseBehaviourProfile profile)
         {
             var stepMeta = new SkeletonStepMeta[request.TurnLengthSteps];
 
@@ -111,12 +117,24 @@ namespace IT4s.Rhythm.Generation.Skeleton
             {
                 bool sourceAnchor = maps.SourceAnchors[i];
                 bool protectedAnchor = request.Plan.PreserveAnchors && sourceAnchor;
-                float metricScore = ScoreMetric(request.Config, maps.MetricalSalience[i], maps.StrongBeats[i]);
-                float sourceRelationScore = ScoreSourceRelation(
-                    request.Plan,
+                float metricScore = ScoreMetric(
                     request.Config,
+                    profile,
+                    maps.MetricalSalience[i],
+                    maps.StrongBeats[i],
+                    maps.MetricStrengthLevels[i]);
+                float sourceRelationScore = ScoreSourceRelation(
+                    request.Config,
+                    profile,
                     maps.SourceOccupied[i],
                     sourceAnchor,
+                    maps.SourceGap[i],
+                    maps.AdjacentToSource[i],
+                    maps.NearSource[i],
+                    maps.InterstitialSourceGap[i],
+                    maps.DistanceToNearestSource[i],
+                    maps.LocalSourceDensity[i],
+                    maps.SegmentSourceWeights[maps.StepToSegment[i]],
                     maps.MetricalSalience[i],
                     maps.StrongBeats[i]);
                 float anchorScore = ScoreAnchor(
@@ -125,19 +143,22 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     sourceAnchor,
                     maps.ExplicitAnchors[i]);
                 float endingScore = ScoreEnding(
-                    request.Plan,
                     request.Config,
+                    profile,
                     maps.EndingRegion[i],
                     maps.StepsFromEnd[i],
                     request.StepsPerQuarter,
                     maps.SourceOccupied[i],
+                    maps.SourceGap[i],
                     maps.MetricalSalience[i],
-                    maps.StrongBeats[i]);
+                    maps.StrongBeats[i],
+                    maps.InterstitialSourceGap[i]);
                 float phraseBalanceScore = ScorePhraseBalance(
                     request.Config,
+                    profile,
                     maps.StepToSegment[i]);
                 float densityShapingScore = ScoreDensityShaping(
-                    request.Plan,
+                    profile,
                     request.Config,
                     maps.MetricStrengthLevels[i]);
                 float spacingPenalty = 0f;
@@ -167,17 +188,26 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
                 if (sourceRelationScore > 0f)
                 {
-                    if (request.Plan.ResponseType == ResponseType.Complement ||
-                        request.Plan.ResponseType == ResponseType.Contrast ||
-                        request.Plan.ResponseType == ResponseType.Fill)
+                    if (profile.SourceOverlapPolicy == SourceOverlapPolicy.PreferGaps ||
+                        profile.SourceOverlapPolicy == SourceOverlapPolicy.Displace ||
+                        profile.SourceOverlapPolicy == SourceOverlapPolicy.Interstitial)
                     {
                         reasonFlags |= SkeletonReasonFlags.ComplementBoosted;
                     }
-                    else if (request.Plan.ResponseType == ResponseType.Mirror)
+                    else if (profile.SourceOverlapPolicy == SourceOverlapPolicy.Preserve)
                     {
                         reasonFlags |= SkeletonReasonFlags.MirrorBoosted;
                     }
                 }
+
+                if (maps.InterstitialSourceGap[i] && sourceRelationScore > 0f)
+                    reasonFlags |= SkeletonReasonFlags.InterstitialBoosted;
+
+                if (phraseBalanceScore > 0f)
+                    reasonFlags |= SkeletonReasonFlags.SegmentTargetBoosted;
+
+                if (profile.EndingPolicy == EndingPolicy.LateDrive && endingScore > 0f)
+                    reasonFlags |= SkeletonReasonFlags.LateDriveBoosted;
 
                 if (anchorScore > 0f)
                     reasonFlags |= SkeletonReasonFlags.AnchorBoosted;
@@ -203,10 +233,20 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     FinalScore = finalScore,
                     Selected = false,
                     SourceOccupied = maps.SourceOccupied[i],
+                    SourceGap = maps.SourceGap[i],
                     SourceAnchor = sourceAnchor,
                     IsExplicitAnchor = maps.ExplicitAnchors[i],
                     IsFallbackAnchor = maps.FallbackAnchors[i],
                     InEndingRegion = maps.EndingRegion[i],
+                    AdjacentToSource = maps.AdjacentToSource[i],
+                    NearSource = maps.NearSource[i],
+                    InterstitialSourceGap = maps.InterstitialSourceGap[i],
+                    DistanceToNearestSourceHit = maps.DistanceToNearestSource[i],
+                    PreviousSourceHitDistance = maps.PreviousSourceDistance[i],
+                    NextSourceHitDistance = maps.NextSourceDistance[i],
+                    LocalSourceDensity = maps.LocalSourceDensity[i],
+                    MetricStrengthLevel = (int)maps.MetricStrengthLevels[i],
+                    SegmentSourceWeight = maps.SegmentSourceWeights[maps.StepToSegment[i]],
                     Protected = protectedAnchor,
                     ReasonFlags = reasonFlags
                 };
@@ -233,6 +273,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     IsFallbackAnchor = meta.IsFallbackAnchor,
                     InEndingRegion = meta.InEndingRegion,
                     IsWeakMetrical = HasFlag(meta.ReasonFlags, SkeletonReasonFlags.MetricWeak),
+                    SourceOccupied = meta.SourceOccupied,
+                    AdjacentToSource = meta.AdjacentToSource,
+                    NearSource = meta.NearSource,
+                    InterstitialSourceGap = meta.InterstitialSourceGap,
+                    LocalSourceDensity = meta.LocalSourceDensity,
+                    SegmentTargetWeight = meta.SegmentSourceWeight,
                     SegmentIndex = meta.SegmentIndex
                 });
             }
@@ -242,14 +288,31 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
         private static SkeletonContext BuildSelectionContext(
             SkeletonBuildRequest request,
+            SkeletonDerivedMaps maps,
             SkeletonStepMeta[] stepMeta)
+        {
+            return BuildSelectionContext(request, maps, stepMeta, null);
+        }
+
+        private static SkeletonContext BuildSelectionContext(
+            SkeletonBuildRequest request,
+            SkeletonDerivedMaps maps,
+            SkeletonStepMeta[] stepMeta,
+            ResponseBehaviourProfile profile)
         {
             var explicitAnchors = new bool[stepMeta.Length];
             var fallbackAnchors = new bool[stepMeta.Length];
             var endingSteps = new bool[stepMeta.Length];
             var weakMetricalSteps = new bool[stepMeta.Length];
+            var sourceOccupiedSteps = new bool[stepMeta.Length];
+            var adjacentToSourceSteps = new bool[stepMeta.Length];
+            var nearSourceSteps = new bool[stepMeta.Length];
+            var interstitialSourceGapSteps = new bool[stepMeta.Length];
+            var localSourceDensity = new int[stepMeta.Length];
+            var metricStrengthLevels = new MetricStrengthLevel[stepMeta.Length];
             var metricalWeights = new float[stepMeta.Length];
             var sourceRelationScores = new float[stepMeta.Length];
+            var segmentTargetWeightsByStep = new float[stepMeta.Length];
             var segmentByStep = new int[stepMeta.Length];
 
             for (int i = 0; i < stepMeta.Length; i++)
@@ -258,19 +321,29 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 fallbackAnchors[i] = stepMeta[i].IsFallbackAnchor;
                 endingSteps[i] = stepMeta[i].InEndingRegion;
                 weakMetricalSteps[i] = HasFlag(stepMeta[i].ReasonFlags, SkeletonReasonFlags.MetricWeak);
+                sourceOccupiedSteps[i] = stepMeta[i].SourceOccupied;
+                adjacentToSourceSteps[i] = stepMeta[i].AdjacentToSource;
+                nearSourceSteps[i] = stepMeta[i].NearSource;
+                interstitialSourceGapSteps[i] = stepMeta[i].InterstitialSourceGap;
+                localSourceDensity[i] = stepMeta[i].LocalSourceDensity;
+                metricStrengthLevels[i] = maps.MetricStrengthLevels[i];
                 metricalWeights[i] = stepMeta[i].MetricScore;
                 sourceRelationScores[i] = stepMeta[i].SourceRelationScore;
+                segmentTargetWeightsByStep[i] = profile != null
+                    ? profile.GetSegmentTargetWeight(stepMeta[i].SegmentIndex)
+                    : 1f;
                 segmentByStep[i] = stepMeta[i].SegmentIndex;
             }
 
             return new SkeletonContext
             {
                 ResponseType = request.Plan.ResponseType,
+                BehaviourProfile = profile,
                 TargetDensity = request.Plan.TargetDensity,
                 TotalSteps = request.TurnLengthSteps,
                 MinSpacingSteps = request.Config.MinimumStepSpacing,
-                PreserveAnchors = request.Plan.PreserveAnchors,
-                RequireStrongEnding = request.Plan.MirrorEnding,
+                PreserveAnchors = profile != null ? profile.PreserveAnchors : request.Plan.PreserveAnchors,
+                RequireStrongEnding = profile != null ? profile.RequireStrongEnding : request.Plan.MirrorEnding,
                 EndingWindowSteps = request.StepsPerQuarter,
                 RebalanceAcrossSegments = request.Config.RebalanceAcrossSegments,
                 DensityTolerance = request.Config.DensityTolerance,
@@ -278,8 +351,15 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 FallbackAnchors = fallbackAnchors,
                 EndingSteps = endingSteps,
                 WeakMetricalSteps = weakMetricalSteps,
+                SourceOccupiedSteps = sourceOccupiedSteps,
+                AdjacentToSourceSteps = adjacentToSourceSteps,
+                NearSourceSteps = nearSourceSteps,
+                InterstitialSourceGapSteps = interstitialSourceGapSteps,
+                LocalSourceDensity = localSourceDensity,
+                MetricStrengthLevels = metricStrengthLevels,
                 MetricalWeights = metricalWeights,
                 SourceRelationScores = sourceRelationScores,
+                SegmentTargetWeightsByStep = segmentTargetWeightsByStep,
                 SegmentByStep = segmentByStep
             };
         }
@@ -304,6 +384,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
                 float metricalWeight = ResolveMetricalWeight(stepScore, context, stepIndex);
                 float sourceRelationScore = ResolveSourceRelationScore(stepScore, context, stepIndex);
+                int segmentIndex = ResolveSegment(stepScore, context, stepIndex);
 
                 candidates.Add(new SelectionCandidate(
                     stepIndex,
@@ -313,7 +394,14 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     ResolveAnchorPriority(stepScore, context, stepIndex),
                     ResolveEndingRegion(stepScore, context, stepIndex),
                     ResolveWeakMetrical(stepScore, context, stepIndex, metricalWeight),
-                    ResolveSegment(stepScore, context, stepIndex)));
+                    segmentIndex,
+                    ResolveSourceOccupied(stepScore, context, stepIndex),
+                    ResolveAdjacentToSource(stepScore, context, stepIndex),
+                    ResolveNearSource(stepScore, context, stepIndex),
+                    ResolveInterstitialSourceGap(stepScore, context, stepIndex),
+                    ResolveLocalSourceDensity(stepScore, context, stepIndex),
+                    ResolveMetricStrengthLevel(context, stepIndex, metricalWeight),
+                    ResolveSegmentTargetWeight(stepScore, context, stepIndex, segmentIndex)));
             }
 
             return candidates;
@@ -429,6 +517,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
             }
 
             if (useSoftConstraints &&
+                ShouldDeferForBehaviourPolicy(candidate, candidates, context, state, targetCount, minSpacing))
+            {
+                return false;
+            }
+
+            if (useSoftConstraints &&
                 ShouldDeferForSegmentBalance(candidate, candidates, context, state, targetCount, minSpacing))
             {
                 return false;
@@ -481,33 +575,97 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 return false;
             }
 
-            switch (context.ResponseType)
+            ResponseBehaviourProfile profile = context.BehaviourProfile;
+            if (profile == null)
+                profile = ResponseBehaviourProfile.Neutral(context.ResponseType, context.TargetDensity, state.SegmentCounts.Length);
+
+            switch (profile.WeakStepPolicy)
             {
-                case ResponseType.Simplify:
+                case WeakStepPolicy.Suppress:
                     return true;
 
-                case ResponseType.Mirror:
-                    return candidate.SourceRelationScore < 0.15f;
+                case WeakStepPolicy.Defer:
+                    if (profile.ResponseType == ResponseType.Intensify)
+                        return state.SelectedCount < targetCount * profile.WeakStepSelectionPortion;
 
-                case ResponseType.Complement:
-                    return candidate.SourceRelationScore < 0.20f;
+                    return candidate.SourceRelationScore < 0.12f;
 
-                case ResponseType.Fill:
+                case WeakStepPolicy.Allow:
                     return false;
 
-                case ResponseType.Contrast:
-                    float bestNonWeakScore = GetBestSelectableNonWeakScore(candidates, state, minSpacing);
-                    if (float.IsNegativeInfinity(bestNonWeakScore))
-                        return false;
-
-                    return candidate.Score < bestNonWeakScore + 0.05f;
-
-                case ResponseType.Intensify:
-                    return state.SelectedCount < targetCount * 0.5f;
+                case WeakStepPolicy.PreferInterstitial:
+                    return !candidate.InterstitialSourceGap && !candidate.AdjacentToSource;
 
                 default:
                     return true;
             }
+        }
+
+        private static bool ShouldDeferForBehaviourPolicy(
+            SelectionCandidate candidate,
+            List<SelectionCandidate> candidates,
+            SkeletonContext context,
+            SelectionState state,
+            int targetCount,
+            int minSpacing)
+        {
+            ResponseBehaviourProfile profile = context.BehaviourProfile;
+            if (profile == null)
+                return false;
+
+            if (profile.LimitDirectOverlap &&
+                candidate.SourceOccupied &&
+                candidate.AnchorPriority == AnchorPriority.NonAnchor &&
+                CountSelectedSourceOverlaps(candidates, state) >= GetAllowedDirectOverlapCount(profile, targetCount) &&
+                ExistsSelectableNonOverlapCandidate(candidates, state, minSpacing))
+            {
+                return true;
+            }
+
+            if (profile.SourceOverlapPolicy == SourceOverlapPolicy.Preserve &&
+                !candidate.SourceOccupied &&
+                !candidate.NearSource &&
+                candidate.AnchorPriority == AnchorPriority.NonAnchor &&
+                ExistsSelectableSourceRelatedCandidate(candidates, state, minSpacing))
+            {
+                return true;
+            }
+
+            if (profile.SourceOverlapPolicy == SourceOverlapPolicy.ReduceToAnchors &&
+                candidate.MetricStrengthLevel == MetricStrengthLevel.Weak &&
+                candidate.AnchorPriority == AnchorPriority.NonAnchor)
+            {
+                return true;
+            }
+
+            if (profile.GuaranteeInterstitial &&
+                !candidate.InterstitialSourceGap &&
+                !HasSelectedInterstitial(candidates, state) &&
+                targetCount - state.SelectedCount <= 1 &&
+                ExistsSelectableInterstitialCandidate(candidates, state, minSpacing))
+            {
+                return true;
+            }
+
+            if (profile.GuaranteeExpansion &&
+                !IsExpansionCandidate(candidate) &&
+                !HasSelectedExpansion(candidates, state) &&
+                targetCount - state.SelectedCount <= 1 &&
+                ExistsSelectableExpansionCandidate(candidates, state, minSpacing))
+            {
+                return true;
+            }
+
+            if (profile.GuaranteeLateDrive &&
+                !candidate.InEndingRegion &&
+                !state.HasEnding &&
+                targetCount - state.SelectedCount <= 1 &&
+                ExistsSelectableEndingCandidate(candidates, state, minSpacing))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private static bool ShouldDeferForSegmentBalance(
@@ -526,6 +684,11 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 return false;
 
             int softLimit = GetSegmentSoftLimit(targetCount, state.SegmentCounts.Length);
+            if (candidate.SegmentTargetWeight > 1.08f)
+                softLimit++;
+            else if (candidate.SegmentTargetWeight < 0.92f)
+                softLimit = Math.Max(1, softLimit - 1);
+
             if (state.SegmentCounts[segmentIndex] < softLimit)
                 return false;
 
@@ -539,6 +702,137 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 minSpacing,
                 segmentIndex,
                 softLimit);
+        }
+
+        private static int CountSelectedSourceOverlaps(
+            List<SelectionCandidate> candidates,
+            SelectionState state)
+        {
+            int count = 0;
+            for (int i = 0; i < state.SelectedSteps.Count; i++)
+            {
+                SelectionCandidate candidate = FindCandidateByStep(candidates, state.SelectedSteps[i]);
+                if (candidate != null && candidate.SourceOccupied)
+                    count++;
+            }
+
+            return count;
+        }
+
+        private static int GetAllowedDirectOverlapCount(
+            ResponseBehaviourProfile profile,
+            int targetCount)
+        {
+            float limit = profile.DirectOverlapSoftLimit;
+            int allowed = (int)Math.Floor(targetCount * limit);
+            return Math.Max(0, allowed);
+        }
+
+        private static bool ExistsSelectableNonOverlapCandidate(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int minSpacing)
+        {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                SelectionCandidate candidate = candidates[i];
+                if (!candidate.SourceOccupied &&
+                    CandidatePassesBaseConstraints(candidate, state, minSpacing))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ExistsSelectableSourceRelatedCandidate(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int minSpacing)
+        {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                SelectionCandidate candidate = candidates[i];
+                if ((candidate.SourceOccupied || candidate.NearSource) &&
+                    CandidatePassesBaseConstraints(candidate, state, minSpacing))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HasSelectedInterstitial(
+            List<SelectionCandidate> candidates,
+            SelectionState state)
+        {
+            for (int i = 0; i < state.SelectedSteps.Count; i++)
+            {
+                SelectionCandidate candidate = FindCandidateByStep(candidates, state.SelectedSteps[i]);
+                if (candidate != null && candidate.InterstitialSourceGap)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool ExistsSelectableInterstitialCandidate(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int minSpacing)
+        {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                SelectionCandidate candidate = candidates[i];
+                if (candidate.InterstitialSourceGap &&
+                    CandidatePassesBaseConstraints(candidate, state, minSpacing))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HasSelectedExpansion(
+            List<SelectionCandidate> candidates,
+            SelectionState state)
+        {
+            for (int i = 0; i < state.SelectedSteps.Count; i++)
+            {
+                SelectionCandidate candidate = FindCandidateByStep(candidates, state.SelectedSteps[i]);
+                if (candidate != null && IsExpansionCandidate(candidate))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool ExistsSelectableExpansionCandidate(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int minSpacing)
+        {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                SelectionCandidate candidate = candidates[i];
+                if (IsExpansionCandidate(candidate) &&
+                    CandidatePassesBaseConstraints(candidate, state, minSpacing))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsExpansionCandidate(SelectionCandidate candidate)
+        {
+            return !candidate.SourceOccupied &&
+                   candidate.NearSource &&
+                   candidate.MetricStrengthLevel != MetricStrengthLevel.Weak;
         }
 
         private static void EnsureEndingSelection(
@@ -572,6 +866,161 @@ namespace IT4s.Rhythm.Generation.Skeleton
             RemoveSelectedAt(candidates, state, replacementIndex);
             SelectCandidate(endingCandidate, state);
             context.RecordForcedEndingStep(endingCandidate.StepIndex);
+        }
+
+        private static void EnsureBehaviourProfileSelection(
+            List<SelectionCandidate> candidates,
+            SkeletonContext context,
+            SelectionState state,
+            int targetCount)
+        {
+            ResponseBehaviourProfile profile = context.BehaviourProfile;
+            if (profile == null || targetCount <= 0)
+                return;
+
+            if (profile.GuaranteeInterstitial && !HasSelectedInterstitial(candidates, state))
+            {
+                TryEnsureCandidate(
+                    candidates,
+                    state,
+                    targetCount,
+                    Math.Max(0, context.MinSpacingSteps - 1),
+                    IsInterstitialCandidate);
+            }
+
+            if (profile.GuaranteeExpansion && !HasSelectedExpansion(candidates, state))
+            {
+                TryEnsureCandidate(
+                    candidates,
+                    state,
+                    targetCount,
+                    Math.Max(0, context.MinSpacingSteps - 1),
+                    IsExpansionCandidate);
+            }
+
+            if (profile.GuaranteeLateDrive && !state.HasEnding)
+            {
+                TryEnsureCandidate(
+                    candidates,
+                    state,
+                    targetCount,
+                    Math.Max(0, context.MinSpacingSteps - 1),
+                    IsLateDriveCandidate);
+            }
+        }
+
+        private static bool TryEnsureCandidate(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int targetCount,
+            int minSpacing,
+            Predicate<SelectionCandidate> predicate)
+        {
+            SelectionCandidate candidate = FindBestSelectableCandidate(candidates, state, minSpacing, predicate);
+            if (candidate != null && state.SelectedCount < targetCount)
+            {
+                SelectCandidate(candidate, state);
+                return true;
+            }
+
+            if (candidate != null)
+            {
+                int replacementIndex = FindReplacementIndexForBehaviourGuarantee(candidates, state, predicate);
+                if (replacementIndex < 0)
+                    return false;
+
+                SelectionCandidate removedCandidate = FindCandidateByStep(candidates, state.SelectedSteps[replacementIndex]);
+                RemoveSelectedAt(candidates, state, replacementIndex);
+                candidate = FindBestSelectableCandidate(candidates, state, minSpacing, predicate);
+                if (candidate != null)
+                {
+                    SelectCandidate(candidate, state);
+                    return true;
+                }
+
+                if (removedCandidate != null)
+                    SelectCandidate(removedCandidate, state);
+
+                return false;
+            }
+
+            int relaxedReplacementIndex = FindReplacementIndexForBehaviourGuarantee(candidates, state, predicate);
+            if (relaxedReplacementIndex < 0)
+                return false;
+
+            SelectionCandidate relaxedRemovedCandidate = FindCandidateByStep(candidates, state.SelectedSteps[relaxedReplacementIndex]);
+            RemoveSelectedAt(candidates, state, relaxedReplacementIndex);
+            candidate = FindBestSelectableCandidate(candidates, state, 0, predicate);
+            if (candidate == null)
+            {
+                if (relaxedRemovedCandidate != null)
+                    SelectCandidate(relaxedRemovedCandidate, state);
+
+                return false;
+            }
+
+            SelectCandidate(candidate, state);
+            return true;
+        }
+
+        private static SelectionCandidate FindBestSelectableCandidate(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int minSpacing,
+            Predicate<SelectionCandidate> predicate)
+        {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                SelectionCandidate candidate = candidates[i];
+                if (predicate(candidate) &&
+                    CandidatePassesBaseConstraints(candidate, state, minSpacing))
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        private static int FindReplacementIndexForBehaviourGuarantee(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            Predicate<SelectionCandidate> protectedPredicate)
+        {
+            int bestIndex = -1;
+            SelectionCandidate bestCandidate = null;
+
+            for (int i = 0; i < state.SelectedSteps.Count; i++)
+            {
+                SelectionCandidate candidate = FindCandidateByStep(candidates, state.SelectedSteps[i]);
+                if (candidate == null ||
+                    protectedPredicate(candidate) ||
+                    candidate.AnchorPriority != AnchorPriority.NonAnchor)
+                {
+                    continue;
+                }
+
+                if (bestCandidate == null || IsBetterReplacementRemoval(candidate, bestCandidate))
+                {
+                    bestCandidate = candidate;
+                    bestIndex = i;
+                }
+            }
+
+            return bestIndex;
+        }
+
+        private static bool IsInterstitialCandidate(SelectionCandidate candidate)
+        {
+            return candidate.InterstitialSourceGap;
+        }
+
+        private static bool IsLateDriveCandidate(SelectionCandidate candidate)
+        {
+            return candidate.InEndingRegion &&
+                   (candidate.MetricStrengthLevel == MetricStrengthLevel.Strong ||
+                    candidate.MetricStrengthLevel == MetricStrengthLevel.Medium ||
+                    candidate.MetricStrengthLevel == MetricStrengthLevel.Strongest);
         }
 
         private static int FindReplacementIndexForEnding(
@@ -930,6 +1379,104 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 stepIndex * DefaultSegmentCount / context.TotalSteps);
         }
 
+        private static bool ResolveSourceOccupied(
+            StepScore stepScore,
+            SkeletonContext context,
+            int stepIndex)
+        {
+            if (HasValue(context.SourceOccupiedSteps, stepIndex))
+                return context.SourceOccupiedSteps[stepIndex];
+
+            return stepScore.SourceOccupied;
+        }
+
+        private static bool ResolveAdjacentToSource(
+            StepScore stepScore,
+            SkeletonContext context,
+            int stepIndex)
+        {
+            if (HasValue(context.AdjacentToSourceSteps, stepIndex))
+                return context.AdjacentToSourceSteps[stepIndex];
+
+            return stepScore.AdjacentToSource;
+        }
+
+        private static bool ResolveNearSource(
+            StepScore stepScore,
+            SkeletonContext context,
+            int stepIndex)
+        {
+            if (HasValue(context.NearSourceSteps, stepIndex))
+                return context.NearSourceSteps[stepIndex];
+
+            return stepScore.NearSource;
+        }
+
+        private static bool ResolveInterstitialSourceGap(
+            StepScore stepScore,
+            SkeletonContext context,
+            int stepIndex)
+        {
+            if (HasValue(context.InterstitialSourceGapSteps, stepIndex))
+                return context.InterstitialSourceGapSteps[stepIndex];
+
+            return stepScore.InterstitialSourceGap;
+        }
+
+        private static int ResolveLocalSourceDensity(
+            StepScore stepScore,
+            SkeletonContext context,
+            int stepIndex)
+        {
+            if (HasValue(context.LocalSourceDensity, stepIndex))
+                return context.LocalSourceDensity[stepIndex];
+
+            return Math.Max(0, stepScore.LocalSourceDensity);
+        }
+
+        private static MetricStrengthLevel ResolveMetricStrengthLevel(
+            SkeletonContext context,
+            int stepIndex,
+            float metricalWeight)
+        {
+            if (context.MetricStrengthLevels != null &&
+                stepIndex >= 0 &&
+                stepIndex < context.MetricStrengthLevels.Length)
+            {
+                return context.MetricStrengthLevels[stepIndex];
+            }
+
+            if (metricalWeight >= 0.95f)
+                return MetricStrengthLevel.Strongest;
+
+            if (metricalWeight >= 0.65f)
+                return MetricStrengthLevel.Strong;
+
+            if (metricalWeight >= 0.40f)
+                return MetricStrengthLevel.Medium;
+
+            return MetricStrengthLevel.Weak;
+        }
+
+        private static float ResolveSegmentTargetWeight(
+            StepScore stepScore,
+            SkeletonContext context,
+            int stepIndex,
+            int segmentIndex)
+        {
+            if (HasValue(context.SegmentTargetWeightsByStep, stepIndex))
+            {
+                ValidateFinite(context.SegmentTargetWeightsByStep[stepIndex], nameof(context.SegmentTargetWeightsByStep));
+                return context.SegmentTargetWeightsByStep[stepIndex];
+            }
+
+            if (context.BehaviourProfile != null)
+                return context.BehaviourProfile.GetSegmentTargetWeight(segmentIndex);
+
+            ValidateFinite(stepScore.SegmentTargetWeight, nameof(stepScore.SegmentTargetWeight));
+            return stepScore.SegmentTargetWeight > 0f ? stepScore.SegmentTargetWeight : 1f;
+        }
+
         private static int GetTargetCount(float targetDensity, int totalSteps)
         {
             int targetCount = (int)Math.Round(
@@ -1049,7 +1596,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
             return selectionScores;
         }
 
-        private static float ScoreMetric(SkeletonBuilderConfig config, float metricSalience, bool isStrongBeat)
+        private static float ScoreMetric(
+            SkeletonBuilderConfig config,
+            ResponseBehaviourProfile profile,
+            float metricSalience,
+            bool isStrongBeat,
+            MetricStrengthLevel strengthLevel)
         {
             float metricWeight = Clamp01(config.MetricStrengthWeight);
             float strongBeatWeight = Clamp01(config.StrongBeatPreferenceWeight);
@@ -1057,62 +1609,91 @@ namespace IT4s.Rhythm.Generation.Skeleton
             float strongBeatBoost = isStrongBeat
                 ? Math.Min(1f - weightedSalience, 0.20f * strongBeatWeight)
                 : 0f;
+            float profileBias = profile != null ? profile.GetMetricClassBias(strengthLevel) : 0f;
 
             return SanitizeScore(
-                Clamp01(weightedSalience + strongBeatBoost));
+                Clamp01(weightedSalience + strongBeatBoost + profileBias));
         }
 
         private static float ScoreSourceRelation(
-            ResponsePlan plan,
             SkeletonBuilderConfig config,
+            ResponseBehaviourProfile profile,
             bool sourceOccupied,
             bool sourceAnchor,
+            bool sourceGap,
+            bool adjacentToSource,
+            bool nearSource,
+            bool interstitialSourceGap,
+            int distanceToNearestSource,
+            int localSourceDensity,
+            float segmentSourceWeight,
             float metricSalience,
             bool isStrongBeat)
         {
-            float complementarity = Clamp01(plan.ComplementarityBias);
+            if (profile == null)
+                profile = ResponseBehaviourProfile.Neutral(ResponseType.Mirror, 0.5f, DefaultSegmentCount);
+
+            float complementarity = Clamp01(profile.ComplementarityBias);
             bool sourceRelated = sourceOccupied || sourceAnchor;
-            float rawScore;
+            float mirrorScale = config.MirrorWeight;
+            float complementScale = config.ComplementWeight * (0.85f + complementarity * 0.30f);
+            float relation = 0f;
 
-            switch (plan.ResponseType)
+            if (sourceOccupied)
+                relation += profile.SourceHitWeight * mirrorScale;
+
+            if (sourceAnchor && !sourceOccupied)
+                relation += profile.SourceHitWeight * 0.65f * mirrorScale;
+
+            if (sourceGap)
+                relation += profile.SourceGapWeight * complementScale;
+
+            if (adjacentToSource)
+                relation += profile.AdjacentSourceWeight * complementScale;
+
+            if (nearSource && !adjacentToSource)
+                relation += profile.NearSourceWeight * complementScale;
+
+            if (!sourceRelated && distanceToNearestSource > 2)
+                relation += profile.FarSourceWeight * complementScale;
+
+            if (interstitialSourceGap)
+                relation += profile.InterstitialWeight * complementScale;
+
+            relation += localSourceDensity > 1
+                ? profile.DenseSourceRegionWeight * Math.Min(1f, localSourceDensity / 3f)
+                : profile.SparseSourceRegionWeight * (1f - Math.Min(1f, segmentSourceWeight * 2f));
+
+            if (profile.SourceOverlapPolicy == SourceOverlapPolicy.ReduceToAnchors &&
+                sourceOccupied &&
+                !sourceAnchor &&
+                metricSalience < 0.75f)
             {
-                case ResponseType.Mirror:
-                    rawScore = config.MirrorWeight *
-                               (sourceOccupied ? 1f : (sourceAnchor ? 0.55f : -0.06f * complementarity));
-                    break;
-
-                case ResponseType.Complement:
-                    rawScore = config.ComplementWeight *
-                               (sourceOccupied ? (-0.25f - 0.15f * complementarity) : (0.70f + 0.10f * complementarity));
-                    break;
-
-                case ResponseType.Simplify:
-                    rawScore = config.MirrorWeight *
-                               (sourceRelated ? 0.40f : 0.08f * complementarity);
-                    break;
-
-                case ResponseType.Intensify:
-                    rawScore = sourceRelated
-                        ? config.MirrorWeight * 0.60f
-                        : config.ComplementWeight * (0.22f + 0.18f * complementarity);
-                    break;
-
-                case ResponseType.Contrast:
-                    rawScore = config.ComplementWeight *
-                               (sourceOccupied ? -0.30f : (0.50f + 0.20f * complementarity));
-                    break;
-
-                case ResponseType.Fill:
-                    float interstitialSupport = isStrongBeat ? 0.18f : 0.50f + (1f - metricSalience) * 0.20f;
-                    rawScore = config.ComplementWeight *
-                               (sourceOccupied ? -0.12f : interstitialSupport + complementarity * 0.15f);
-                    break;
-
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(plan.ResponseType), plan.ResponseType, "Unknown response type.");
+                relation -= 0.16f;
             }
 
-            rawScore *= GetSourceRelationResponseTypeMultiplier(plan.ResponseType);
+            if (profile.SourceOverlapPolicy == SourceOverlapPolicy.Displace &&
+                adjacentToSource &&
+                !isStrongBeat)
+            {
+                relation += 0.08f;
+            }
+
+            if (profile.SourceOverlapPolicy == SourceOverlapPolicy.ExpandAroundSource &&
+                nearSource &&
+                metricSalience >= 0.50f)
+            {
+                relation += 0.10f;
+            }
+
+            if (profile.SourceOverlapPolicy == SourceOverlapPolicy.Interstitial &&
+                interstitialSourceGap &&
+                !isStrongBeat)
+            {
+                relation += 0.12f + (1f - metricSalience) * 0.10f;
+            }
+
+            float rawScore = relation * GetSourceRelationResponseTypeMultiplier(profile.ResponseType);
             float scaled = rawScore * config.SourceRelationScale;
 
             return SanitizeScore(ClampMagnitude(scaled, config.SourceRelationMaxMagnitude));
@@ -1158,17 +1739,22 @@ namespace IT4s.Rhythm.Generation.Skeleton
         }
 
         private static float ScoreEnding(
-            ResponsePlan plan,
             SkeletonBuilderConfig config,
+            ResponseBehaviourProfile profile,
             bool inEndingRegion,
             int stepsFromEnd,
             int stepsPerQuarter,
             bool sourceOccupied,
+            bool sourceGap,
             float metricSalience,
-            bool isStrongBeat)
+            bool isStrongBeat,
+            bool interstitialSourceGap)
         {
             if (!inEndingRegion)
                 return 0f;
+
+            if (profile == null)
+                profile = ResponseBehaviourProfile.Neutral(ResponseType.Mirror, 0.5f, DefaultSegmentCount);
 
             float proximity = GetEndingProximity(stepsFromEnd, stepsPerQuarter);
             float lateWeight = 0.35f + proximity * 0.65f;
@@ -1176,7 +1762,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
             float finalAccent = stepsFromEnd == 0 ? 1f : 0f;
             float directionalScore;
 
-            if (plan.MirrorEnding)
+            if (profile.RequireStrongEnding || profile.EndingPolicy == EndingPolicy.MirrorSource)
             {
                 directionalScore = (sourceOccupied ? 0.75f : 0.20f) * lateWeight;
                 if (isStrongBeat)
@@ -1185,62 +1771,64 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 return SanitizeScore(ClampMagnitude(config.EndingInfluenceWeight * EndingScale * directionalScore, EndingMaxMagnitude));
             }
 
-            switch (plan.ResponseType)
+            switch (profile.EndingPolicy)
             {
-                case ResponseType.Mirror:
-                    directionalScore = (sourceOccupied ? 0.55f : 0.15f) * lateWeight;
-                    break;
-
-                case ResponseType.Complement:
-                    directionalScore = (sourceOccupied ? -0.20f : 0.45f + (1f - metricSalience) * 0.20f) * lateWeight;
-                    break;
-
-                case ResponseType.Simplify:
+                case EndingPolicy.StructuralOnly:
                     directionalScore = (strongFactor - (metricSalience < 0.50f ? 0.35f : 0f)) * lateWeight;
                     break;
 
-                case ResponseType.Intensify:
-                    directionalScore = (strongFactor + finalAccent * 0.35f) * lateWeight;
+                case EndingPolicy.FillGap:
+                    directionalScore = (sourceGap ? 0.48f : -0.20f) * lateWeight;
+                    if (interstitialSourceGap)
+                        directionalScore += 0.16f * lateWeight;
                     break;
 
-                case ResponseType.Contrast:
+                case EndingPolicy.AvoidAccent:
                     directionalScore = (finalAccent > 0f ? -0.60f : 0.20f + (1f - metricSalience) * 0.25f) * lateWeight;
                     break;
 
-                case ResponseType.Fill:
-                    directionalScore = (isStrongBeat ? 0.15f : 0.55f + (1f - metricSalience) * 0.25f) * lateWeight;
+                case EndingPolicy.LateDrive:
+                    directionalScore = (strongFactor + finalAccent * 0.35f) * lateWeight;
+                    if (!sourceOccupied && metricSalience >= 0.50f)
+                        directionalScore += 0.18f * lateWeight;
                     break;
 
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(plan.ResponseType), plan.ResponseType, "Unknown response type.");
+                    throw new ArgumentOutOfRangeException(nameof(profile.EndingPolicy), profile.EndingPolicy, "Unknown ending policy.");
             }
 
             return SanitizeScore(ClampMagnitude(config.EndingInfluenceWeight * EndingScale * directionalScore, EndingMaxMagnitude));
         }
 
-        private static float ScorePhraseBalance(SkeletonBuilderConfig config, int segmentIndex)
+        private static float ScorePhraseBalance(
+            SkeletonBuilderConfig config,
+            ResponseBehaviourProfile profile,
+            int segmentIndex)
         {
             if (!config.RebalanceAcrossSegments)
                 return 0f;
 
-            switch (segmentIndex)
-            {
-                case 1:
-                case 2:
-                    return ClampMagnitude(0.03f, PhraseBalanceMaxMagnitude);
-                case 3:
-                    return ClampMagnitude(0.015f, PhraseBalanceMaxMagnitude);
-                default:
-                    return 0f;
-            }
+            float legacyBalance = segmentIndex == 1 || segmentIndex == 2
+                ? 0.015f
+                : (segmentIndex == 3 ? 0.008f : 0f);
+
+            if (profile == null)
+                return ClampMagnitude(legacyBalance, PhraseBalanceMaxMagnitude);
+
+            float targetWeight = profile.GetSegmentTargetWeight(segmentIndex);
+            float profileScore = (targetWeight - 1f) * profile.SegmentInfluence;
+            return SanitizeScore(ClampMagnitude(legacyBalance + profileScore, PhraseBalanceMaxMagnitude));
         }
 
         private static float ScoreDensityShaping(
-            ResponsePlan plan,
+            ResponseBehaviourProfile profile,
             SkeletonBuilderConfig config,
             MetricStrengthLevel strengthLevel)
         {
-            float targetDensity = Clamp01(plan.TargetDensity);
+            if (profile == null)
+                profile = ResponseBehaviourProfile.Neutral(ResponseType.Mirror, 0.5f, DefaultSegmentCount);
+
+            float targetDensity = Clamp01(profile.TargetDensity);
             float score = 0f;
 
             if (targetDensity < 0.35f)
@@ -1292,31 +1880,41 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 }
             }
 
-            switch (plan.ResponseType)
+            switch (profile.MetricTolerancePolicy)
             {
-                case ResponseType.Fill:
+                case MetricTolerancePolicy.OffbeatFriendly:
                     if (strengthLevel == MetricStrengthLevel.Weak ||
                         strengthLevel == MetricStrengthLevel.Medium)
                     {
-                        score += 0.04f;
+                        score += 0.06f;
                     }
 
                     break;
 
-                case ResponseType.Contrast:
+                case MetricTolerancePolicy.Broad:
                     if (strengthLevel != MetricStrengthLevel.Strongest)
-                        score += 0.03f;
-                    break;
-
-                case ResponseType.Intensify:
-                    if (targetDensity > 0.6f && strengthLevel == MetricStrengthLevel.Medium)
                         score += 0.025f;
                     break;
 
-                case ResponseType.Simplify:
-                    if (strengthLevel != MetricStrengthLevel.Strongest)
-                        score -= 0.03f;
+                case MetricTolerancePolicy.StrongAndMedium:
+                    if (strengthLevel == MetricStrengthLevel.Medium)
+                        score += 0.015f;
                     break;
+
+                case MetricTolerancePolicy.SpineOnly:
+                    if (strengthLevel != MetricStrengthLevel.Strongest)
+                        score -= strengthLevel == MetricStrengthLevel.Strong ? 0.04f : 0.08f;
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(profile.MetricTolerancePolicy), profile.MetricTolerancePolicy, "Unknown metric tolerance policy.");
+            }
+
+            if (profile.ResponseType == ResponseType.Intensify &&
+                targetDensity > 0.45f &&
+                strengthLevel == MetricStrengthLevel.Medium)
+            {
+                score += 0.035f;
             }
 
             return SanitizeScore(ClampMagnitude(score, DensityShapingMaxMagnitude));
@@ -1504,7 +2102,14 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 AnchorPriority anchorPriority,
                 bool inEndingRegion,
                 bool isWeakMetrical,
-                int segmentIndex)
+                int segmentIndex,
+                bool sourceOccupied,
+                bool adjacentToSource,
+                bool nearSource,
+                bool interstitialSourceGap,
+                int localSourceDensity,
+                MetricStrengthLevel metricStrengthLevel,
+                float segmentTargetWeight)
             {
                 StepIndex = stepIndex;
                 Score = score;
@@ -1514,6 +2119,13 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 InEndingRegion = inEndingRegion;
                 IsWeakMetrical = isWeakMetrical;
                 SegmentIndex = segmentIndex;
+                SourceOccupied = sourceOccupied;
+                AdjacentToSource = adjacentToSource;
+                NearSource = nearSource;
+                InterstitialSourceGap = interstitialSourceGap;
+                LocalSourceDensity = localSourceDensity;
+                MetricStrengthLevel = metricStrengthLevel;
+                SegmentTargetWeight = segmentTargetWeight;
             }
 
             public int StepIndex { get; private set; }
@@ -1524,6 +2136,13 @@ namespace IT4s.Rhythm.Generation.Skeleton
             public bool InEndingRegion { get; private set; }
             public bool IsWeakMetrical { get; private set; }
             public int SegmentIndex { get; private set; }
+            public bool SourceOccupied { get; private set; }
+            public bool AdjacentToSource { get; private set; }
+            public bool NearSource { get; private set; }
+            public bool InterstitialSourceGap { get; private set; }
+            public int LocalSourceDensity { get; private set; }
+            public MetricStrengthLevel MetricStrengthLevel { get; private set; }
+            public float SegmentTargetWeight { get; private set; }
         }
 
         private sealed class SelectionState

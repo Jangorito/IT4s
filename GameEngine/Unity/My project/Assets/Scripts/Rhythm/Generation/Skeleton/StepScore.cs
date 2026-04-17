@@ -15,6 +15,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
         public bool IsFallbackAnchor { get; set; }
         public bool InEndingRegion { get; set; }
         public bool IsWeakMetrical { get; set; }
+        public bool SourceOccupied { get; set; }
+        public bool AdjacentToSource { get; set; }
+        public bool NearSource { get; set; }
+        public bool InterstitialSourceGap { get; set; }
+        public int LocalSourceDensity { get; set; }
+        public float SegmentTargetWeight { get; set; } = 1f;
         public int SegmentIndex { get; set; } = -1;
 
         public int stepIndex

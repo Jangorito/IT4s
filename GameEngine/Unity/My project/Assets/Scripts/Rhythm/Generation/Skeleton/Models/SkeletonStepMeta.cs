@@ -21,10 +21,20 @@ namespace IT4s.Rhythm.Generation.Skeleton.Models
         public float FinalScore { get; set; }
         public bool Selected { get; set; }
         public bool SourceOccupied { get; set; }
+        public bool SourceGap { get; set; }
         public bool SourceAnchor { get; set; }
         public bool IsExplicitAnchor { get; set; }
         public bool IsFallbackAnchor { get; set; }
         public bool InEndingRegion { get; set; }
+        public bool AdjacentToSource { get; set; }
+        public bool NearSource { get; set; }
+        public bool InterstitialSourceGap { get; set; }
+        public int DistanceToNearestSourceHit { get; set; }
+        public int PreviousSourceHitDistance { get; set; }
+        public int NextSourceHitDistance { get; set; }
+        public int LocalSourceDensity { get; set; }
+        public int MetricStrengthLevel { get; set; }
+        public float SegmentSourceWeight { get; set; }
         public bool Protected { get; set; }
         public SkeletonReasonFlags ReasonFlags { get; set; }
     }

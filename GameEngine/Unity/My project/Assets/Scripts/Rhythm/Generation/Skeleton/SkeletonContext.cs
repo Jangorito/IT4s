@@ -16,13 +16,21 @@ namespace IT4s.Rhythm.Generation.Skeleton
         public bool RebalanceAcrossSegments { get; set; }
         public float DensityTolerance { get; set; }
         public ResponseType ResponseType { get; set; }
+        internal ResponseBehaviourProfile BehaviourProfile { get; set; }
 
         public bool[] ExplicitAnchors { get; set; }
         public bool[] FallbackAnchors { get; set; }
         public bool[] EndingSteps { get; set; }
         public bool[] WeakMetricalSteps { get; set; }
+        public bool[] SourceOccupiedSteps { get; set; }
+        public bool[] AdjacentToSourceSteps { get; set; }
+        public bool[] NearSourceSteps { get; set; }
+        public bool[] InterstitialSourceGapSteps { get; set; }
+        public int[] LocalSourceDensity { get; set; }
+        internal MetricStrengthLevel[] MetricStrengthLevels { get; set; }
         public float[] MetricalWeights { get; set; }
         public float[] SourceRelationScores { get; set; }
+        public float[] SegmentTargetWeightsByStep { get; set; }
         public int[] SegmentByStep { get; set; }
         public IReadOnlyList<int> ForcedEndingSteps
         {

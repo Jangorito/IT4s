@@ -108,7 +108,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
                         meta.InEndingRegion,
                         meta.IsStrongBeat,
                         HasFlag(meta.ReasonFlags, SkeletonReasonFlags.MetricWeak),
-                        meta.Protected);
+                        meta.Protected,
+                        meta.SourceOccupied,
+                        meta.AdjacentToSource,
+                        meta.InterstitialSourceGap,
+                        meta.DistanceToNearestSourceHit,
+                        meta.SegmentSourceWeight);
             }
 
             return Array.AsReadOnly(copy);
@@ -129,7 +134,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
             bool inEndingRegion,
             bool isStrongBeat,
             bool isWeakMetrical,
-            bool isProtectedAnchor)
+            bool isProtectedAnchor,
+            bool sourceOccupied = false,
+            bool adjacentToSource = false,
+            bool interstitialSourceGap = false,
+            int distanceToNearestSourceHit = 0,
+            float segmentSourceWeight = 0f)
         {
             StepIndex = stepIndex;
             IsAnchor = isAnchor;
@@ -137,6 +147,11 @@ namespace IT4s.Rhythm.Generation.Skeleton
             IsStrongBeat = isStrongBeat;
             IsWeakMetrical = isWeakMetrical;
             IsProtectedAnchor = isProtectedAnchor;
+            SourceOccupied = sourceOccupied;
+            AdjacentToSource = adjacentToSource;
+            InterstitialSourceGap = interstitialSourceGap;
+            DistanceToNearestSourceHit = distanceToNearestSourceHit;
+            SegmentSourceWeight = segmentSourceWeight;
         }
 
         public int StepIndex { get; private set; }
@@ -145,6 +160,11 @@ namespace IT4s.Rhythm.Generation.Skeleton
         public bool IsStrongBeat { get; private set; }
         public bool IsWeakMetrical { get; private set; }
         public bool IsProtectedAnchor { get; private set; }
+        public bool SourceOccupied { get; private set; }
+        public bool AdjacentToSource { get; private set; }
+        public bool InterstitialSourceGap { get; private set; }
+        public int DistanceToNearestSourceHit { get; private set; }
+        public float SegmentSourceWeight { get; private set; }
 
         public static SkeletonStepDebugAnnotation Empty(int stepIndex)
         {

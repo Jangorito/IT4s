@@ -648,6 +648,129 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
         }
 
         [Test]
+        public void BuildSkeleton_SourceNeighbourhoodFacts_AreMappedIntoStepMeta()
+        {
+            var builder = new SkeletonBuilder();
+            SkeletonPattern pattern = builder.BuildSkeleton(Request(
+                turnLengthSteps: 16,
+                stepsPerQuarter: 4,
+                sourceVelocities: Velocities(16, 4, 8)));
+
+            Assert.That(pattern.StepMeta[4].SourceOccupied, Is.True);
+            Assert.That(pattern.StepMeta[4].SourceGap, Is.False);
+            Assert.That(pattern.StepMeta[5].AdjacentToSource, Is.True);
+            Assert.That(pattern.StepMeta[6].NearSource, Is.True);
+            Assert.That(pattern.StepMeta[6].InterstitialSourceGap, Is.True);
+            Assert.That(pattern.StepMeta[6].DistanceToNearestSourceHit, Is.EqualTo(2));
+            Assert.That(pattern.StepMeta[6].PreviousSourceHitDistance, Is.EqualTo(2));
+            Assert.That(pattern.StepMeta[6].NextSourceHitDistance, Is.EqualTo(2));
+            Assert.That(pattern.StepMeta[6].LocalSourceDensity, Is.EqualTo(2));
+            Assert.That(pattern.StepMeta[0].InterstitialSourceGap, Is.False);
+        }
+
+        [Test]
+        public void BuildSkeleton_MirrorAndSimplify_ProduceDistinctSelections()
+        {
+            var builder = new SkeletonBuilder();
+            int[] source = Velocities(48, 0, 3, 6, 12, 18, 24, 30, 33, 36, 42);
+
+            SkeletonPattern mirror = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                sourceVelocities: source,
+                plan: Plan(48, responseType: ResponseType.Mirror, targetDensity: 0.35f, preserveAnchors: true),
+                sourceAnalysis: Analysis(ExplicitAnchorFlagsOnly(48, 0, 24, 36)),
+                config: NoJitterConfig()));
+
+            SkeletonPattern simplify = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                sourceVelocities: source,
+                plan: Plan(48, responseType: ResponseType.Simplify, targetDensity: 0.35f, preserveAnchors: true),
+                sourceAnalysis: Analysis(ExplicitAnchorFlagsOnly(48, 0, 24, 36)),
+                config: NoJitterConfig()));
+
+            Assert.That(simplify.SelectedStepIndices, Is.Not.EqualTo(mirror.SelectedStepIndices));
+            Assert.That(CountSelectedWeak(simplify), Is.LessThan(CountSelectedWeak(mirror)));
+            Assert.That(CountSelectedInterstitial(simplify), Is.LessThanOrEqualTo(CountSelectedInterstitial(mirror)));
+        }
+
+        [Test]
+        public void BuildSkeleton_ComplementAndFill_SeparateGapAnswerFromInterstitialFill()
+        {
+            var builder = new SkeletonBuilder();
+            int[] source = Velocities(48, 0, 8, 16, 24, 32, 40);
+
+            SkeletonPattern complement = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                sourceVelocities: source,
+                plan: Plan(48, responseType: ResponseType.Complement, targetDensity: 0.45f, complementarityBias: 1f),
+                config: NoJitterConfig()));
+
+            SkeletonPattern fill = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                sourceVelocities: source,
+                plan: Plan(48, responseType: ResponseType.Fill, targetDensity: 0.45f, complementarityBias: 1f),
+                config: NoJitterConfig()));
+
+            Assert.That(fill.SelectedStepIndices, Is.Not.EqualTo(complement.SelectedStepIndices));
+            Assert.That(CountSelectedInterstitial(fill), Is.GreaterThan(CountSelectedInterstitial(complement)));
+            Assert.That(CountSelectedWeak(fill), Is.GreaterThanOrEqualTo(CountSelectedWeak(complement)));
+        }
+
+        [Test]
+        public void BuildSkeleton_ContrastAndComplement_SeparateDisplacementFromSparseGaps()
+        {
+            var builder = new SkeletonBuilder();
+            int[] source = Velocities(48, 0, 12, 24, 36);
+
+            SkeletonPattern complement = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                sourceVelocities: source,
+                plan: Plan(48, responseType: ResponseType.Complement, targetDensity: 0.35f, complementarityBias: 1f),
+                config: NoJitterConfig()));
+
+            SkeletonPattern contrast = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                sourceVelocities: source,
+                plan: Plan(48, responseType: ResponseType.Contrast, targetDensity: 0.35f, complementarityBias: 1f),
+                config: NoJitterConfig()));
+
+            Assert.That(contrast.SelectedStepIndices, Is.Not.EqualTo(complement.SelectedStepIndices));
+            Assert.That(CountSelectedAdjacentToSource(contrast), Is.GreaterThan(CountSelectedAdjacentToSource(complement)));
+            Assert.That(contrast.Summary.SourceOverlapCount, Is.LessThanOrEqualTo(complement.Summary.SourceOverlapCount));
+        }
+
+        [Test]
+        public void BuildSkeleton_Intensify_AddsExpansionAndLateDriveIdentity()
+        {
+            var builder = new SkeletonBuilder();
+            int[] source = Velocities(48, 0, 12, 24, 30, 36);
+
+            SkeletonPattern mirror = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                sourceVelocities: source,
+                plan: Plan(48, responseType: ResponseType.Mirror, targetDensity: 0.40f),
+                config: NoJitterConfig()));
+
+            SkeletonPattern intensify = builder.BuildSkeleton(Request(
+                turnLengthSteps: 48,
+                stepsPerQuarter: 12,
+                sourceVelocities: source,
+                plan: Plan(48, responseType: ResponseType.Intensify, targetDensity: 0.40f),
+                config: NoJitterConfig()));
+
+            Assert.That(intensify.SelectedStepIndices, Is.Not.EqualTo(mirror.SelectedStepIndices));
+            Assert.That(CountSelectedExpansion(intensify), Is.GreaterThan(CountSelectedExpansion(mirror)));
+            Assert.That(CountSelectedEnding(intensify), Is.GreaterThanOrEqualTo(1));
+        }
+
+        [Test]
         public void BuildSkeleton_Selection_RespectsTargetDensity()
         {
             var builder = new SkeletonBuilder();
@@ -978,6 +1101,51 @@ namespace IT4s.Rhythm.Generation.Skeleton.Tests
             for (int i = 0; i < activeSteps.Length; i++)
             {
                 if (activeSteps[i])
+                    count++;
+            }
+
+            return count;
+        }
+
+        private static int CountSelectedWeak(SkeletonPattern pattern)
+        {
+            return CountSelectedWhere(
+                pattern,
+                meta => (meta.ReasonFlags & SkeletonReasonFlags.MetricWeak) == SkeletonReasonFlags.MetricWeak);
+        }
+
+        private static int CountSelectedInterstitial(SkeletonPattern pattern)
+        {
+            return CountSelectedWhere(pattern, meta => meta.InterstitialSourceGap);
+        }
+
+        private static int CountSelectedAdjacentToSource(SkeletonPattern pattern)
+        {
+            return CountSelectedWhere(pattern, meta => meta.AdjacentToSource);
+        }
+
+        private static int CountSelectedExpansion(SkeletonPattern pattern)
+        {
+            return CountSelectedWhere(
+                pattern,
+                meta => !meta.SourceOccupied &&
+                        meta.NearSource &&
+                        meta.MetricStrengthLevel != 3);
+        }
+
+        private static int CountSelectedEnding(SkeletonPattern pattern)
+        {
+            return CountSelectedWhere(pattern, meta => meta.InEndingRegion);
+        }
+
+        private static int CountSelectedWhere(
+            SkeletonPattern pattern,
+            System.Predicate<SkeletonStepMeta> predicate)
+        {
+            int count = 0;
+            for (int i = 0; i < pattern.StepMeta.Length; i++)
+            {
+                if (pattern.StepMeta[i].Selected && predicate(pattern.StepMeta[i]))
                     count++;
             }
 

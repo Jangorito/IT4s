@@ -15,6 +15,10 @@ namespace IT4s.Rhythm.Generation.Skeleton.Models
         SpacingSuppressed = 1 << 6,
         SelectedByTieBreak = 1 << 7,
         ProtectedAnchor = 1 << 8,
-        ForcedEnding = 1 << 9
+        ForcedEnding = 1 << 9,
+        InterstitialBoosted = 1 << 10,
+        LateDriveBoosted = 1 << 11,
+        SegmentTargetBoosted = 1 << 12,
+        StructuralPolicy = 1 << 13
     }
 }
