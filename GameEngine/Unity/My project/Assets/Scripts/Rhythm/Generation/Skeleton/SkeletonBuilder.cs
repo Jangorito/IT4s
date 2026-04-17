@@ -41,7 +41,11 @@ namespace IT4s.Rhythm.Generation.Skeleton
             List<StepScore> scoredSteps = BuildScoredSteps(stepMeta);
             SkeletonContext selectionContext = BuildSelectionContext(request, stepMeta);
             bool[] activeSteps = BuildSkeleton(scoredSteps, selectionContext);
-            ApplySelectionToStepMeta(stepMeta, activeSteps, request.Config.MinimumStepSpacing);
+            ApplySelectionToStepMeta(
+                stepMeta,
+                activeSteps,
+                request.Config.MinimumStepSpacing,
+                selectionContext.ForcedEndingSteps);
             float[] selectionScores = BuildSelectionScores(stepMeta);
             int[] selectedStepIndices = BuildSelectedStepIndices(activeSteps);
             SkeletonPatternSummary summary = CreateSummary(request, activeSteps, stepMeta);
@@ -61,6 +65,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 throw new ArgumentNullException(nameof(scoredSteps));
 
             ValidateSelectionContext(context);
+            context.ClearForcedEndingSteps();
 
             List<SelectionCandidate> candidates = BuildSelectionCandidates(scoredSteps, context);
             candidates.Sort(CompareCandidates);
@@ -524,6 +529,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
             if (state.SelectedCount < targetCount)
             {
                 SelectCandidate(endingCandidate, state);
+                context.RecordForcedEndingStep(endingCandidate.StepIndex);
                 return;
             }
 
@@ -533,6 +539,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
             RemoveSelectedAt(candidates, state, replacementIndex);
             SelectCandidate(endingCandidate, state);
+            context.RecordForcedEndingStep(endingCandidate.StepIndex);
         }
 
         private static int FindReplacementIndexForEnding(
@@ -898,15 +905,33 @@ namespace IT4s.Rhythm.Generation.Skeleton
         private static void ApplySelectionToStepMeta(
             SkeletonStepMeta[] stepMeta,
             bool[] activeSteps,
-            int minSpacing)
+            int minSpacing,
+            IReadOnlyList<int> forcedEndingSteps)
         {
             for (int i = 0; i < stepMeta.Length; i++)
             {
                 stepMeta[i].Selected = activeSteps[i];
 
+                if (activeSteps[i] && Contains(forcedEndingSteps, i))
+                    stepMeta[i].ReasonFlags |= SkeletonReasonFlags.ForcedEnding;
+
                 if (!activeSteps[i] && IsSuppressedBySelectedSpacing(i, activeSteps, minSpacing))
                     stepMeta[i].ReasonFlags |= SkeletonReasonFlags.SpacingSuppressed;
             }
+        }
+
+        private static bool Contains(IReadOnlyList<int> values, int value)
+        {
+            if (values == null)
+                return false;
+
+            for (int i = 0; i < values.Count; i++)
+            {
+                if (values[i] == value)
+                    return true;
+            }
+
+            return false;
         }
 
         private static bool IsSuppressedBySelectedSpacing(

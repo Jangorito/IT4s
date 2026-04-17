@@ -14,6 +14,7 @@ namespace IT4s.Rhythm.Generation.Skeleton.Models
         EndingBoosted = 1 << 5,
         SpacingSuppressed = 1 << 6,
         SelectedByTieBreak = 1 << 7,
-        ProtectedAnchor = 1 << 8
+        ProtectedAnchor = 1 << 8,
+        ForcedEnding = 1 << 9
     }
 }

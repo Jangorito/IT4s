@@ -31,9 +31,13 @@ namespace IT4s.Diagnostics.Temporary
             Debug.Log(
                 "[TemporaryTurnAnalysisPlannerBatch] " +
                 "Wrote " + result.TotalRows + " rows " +
+                "and " + result.SkeletonEvaluationRows + " skeleton evaluation rows " +
                 "(base " + result.BaseCaseCount + ", variants " + result.VariantCaseCount + ", " +
                 "variant mode " + (result.VariantModeEnabled ? "enabled" : "disabled") + ") " +
-                "to " + result.CsvPath);
+                "to " + result.CsvPath + ", " +
+                result.SkeletonCsvPath + ", " +
+                result.SkeletonJsonPath + ", " +
+                result.SkeletonMarkdownPath);
         }
     }
 }

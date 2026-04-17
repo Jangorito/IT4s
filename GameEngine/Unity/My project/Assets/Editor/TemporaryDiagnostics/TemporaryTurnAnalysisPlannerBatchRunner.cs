@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using IT4s.Data;
+using IT4s.Rhythm.Generation.Skeleton;
 using IT4s.Rhythm.ResponsePlanning;
 using IT4s.Rhythm.ResponsePlanning.Models;
 using IT4s.Rhythm.TurnAnalysis;
@@ -13,14 +14,25 @@ using IT4s.Rhythm.TurnAnalysis.Models;
 namespace IT4s.Diagnostics.Temporary
 {
     /// <summary>
-    /// Temporary editor-only diagnostic harness for exercising the PatternTurn -> analysis -> planner seam.
+    /// Temporary editor-only diagnostic harness for exercising PatternTurn -> analysis -> planner -> skeleton.
     /// It deliberately bypasses scene orchestration, live capture, OSC, playback, and Play Mode.
     /// </summary>
     internal sealed class TemporaryTurnAnalysisPlannerBatchRunner
     {
+        private const string DefaultSkeletonBuilderVersion = "SkeletonBuilder.DefaultConfig.v1";
+        private const int EvaluatedResponseTypeCount = 6;
+
         public TemporaryTurnAnalysisPlannerBatchResult Run(
             SyntheticDatasetGenerationMode generationMode,
             string outputDirectory)
+        {
+            return Run(generationMode, outputDirectory, DefaultSkeletonBuilderVersion);
+        }
+
+        public TemporaryTurnAnalysisPlannerBatchResult Run(
+            SyntheticDatasetGenerationMode generationMode,
+            string outputDirectory,
+            string skeletonBuilderVersion)
         {
             if (string.IsNullOrEmpty(outputDirectory))
                 throw new ArgumentException("Output directory is required.", nameof(outputDirectory));
@@ -28,12 +40,20 @@ namespace IT4s.Diagnostics.Temporary
             Directory.CreateDirectory(outputDirectory);
 
             string csvPath = Path.Combine(outputDirectory, GetFileName(generationMode));
+            string skeletonCsvPath = Path.Combine(outputDirectory, GetSkeletonCsvFileName(generationMode, skeletonBuilderVersion));
+            string skeletonJsonPath = Path.Combine(outputDirectory, GetSkeletonJsonFileName(generationMode, skeletonBuilderVersion));
+            string skeletonMarkdownPath = Path.Combine(outputDirectory, GetSkeletonMarkdownFileName(generationMode, skeletonBuilderVersion));
             IReadOnlyList<SyntheticTurnCase> syntheticCases = SyntheticPatternTurnDataset.Generate(generationMode);
 
             TurnAnalyser analyser = TemporaryPipelineFactory.CreateTurnAnalyser();
             ResponsePlanner planner = TemporaryPipelineFactory.CreateResponsePlanner();
+            SkeletonBuilder skeletonBuilder = TemporaryPipelineFactory.CreateSkeletonBuilder();
+            SkeletonBuilderConfig skeletonBuilderConfig = TemporaryPipelineFactory.CreateSkeletonBuilderConfig();
 
             var rows = new List<TemporaryTurnAnalysisPlannerCsvRow>(syntheticCases.Count);
+            var skeletonRows = new List<TemporaryTurnAnalysisSkeletonCsvRow>(
+                syntheticCases.Count * EvaluatedResponseTypeCount);
+            var skeletonCaseReports = new List<TemporarySkeletonCaseReport>(syntheticCases.Count);
             int baseCaseCount = 0;
             int variantCaseCount = 0;
 
@@ -55,6 +75,32 @@ namespace IT4s.Diagnostics.Temporary
                     plan,
                     snapshot));
 
+                TemporarySkeletonCaseReport skeletonCaseReport =
+                    TemporaryTurnAnalysisSkeletonReportBuilder.BuildCaseReport(
+                        syntheticCase,
+                        patternTurn,
+                        analysis,
+                        plan,
+                        snapshot,
+                        planner,
+                        skeletonBuilder,
+                        skeletonBuilderConfig,
+                        skeletonBuilderVersion);
+
+                skeletonCaseReports.Add(skeletonCaseReport);
+
+                if (skeletonCaseReport.responseEvaluations != null)
+                {
+                    for (int responseIndex = 0;
+                         responseIndex < skeletonCaseReport.responseEvaluations.Length;
+                         responseIndex++)
+                    {
+                        skeletonRows.Add(TemporaryTurnAnalysisSkeletonCsvRow.From(
+                            skeletonCaseReport,
+                            skeletonCaseReport.responseEvaluations[responseIndex]));
+                    }
+                }
+
                 if (syntheticCase.VariantKind == SyntheticVariantKind.Base)
                     baseCaseCount++;
                 else
@@ -62,10 +108,23 @@ namespace IT4s.Diagnostics.Temporary
             }
 
             TemporaryTurnAnalysisPlannerCsvWriter.Write(csvPath, rows);
+            TemporaryTurnAnalysisSkeletonCsvWriter.Write(skeletonCsvPath, skeletonRows);
+
+            TemporarySkeletonBatchReport skeletonBatchReport =
+                TemporaryTurnAnalysisSkeletonReportBuilder.BuildBatchReport(
+                    generationMode,
+                    skeletonBuilderVersion,
+                    skeletonCaseReports);
+            TemporaryTurnAnalysisSkeletonJsonWriter.Write(skeletonJsonPath, skeletonBatchReport);
+            TemporaryTurnAnalysisSkeletonMarkdownWriter.Write(skeletonMarkdownPath, skeletonBatchReport);
 
             return new TemporaryTurnAnalysisPlannerBatchResult(
                 csvPath,
+                skeletonCsvPath,
+                skeletonJsonPath,
+                skeletonMarkdownPath,
                 rows.Count,
+                skeletonRows.Count,
                 baseCaseCount,
                 variantCaseCount,
                 generationMode);
@@ -83,26 +142,119 @@ namespace IT4s.Diagnostics.Temporary
                     throw new ArgumentOutOfRangeException(nameof(generationMode), generationMode, "Unknown generation mode.");
             }
         }
+
+        private static string GetSkeletonCsvFileName(
+            SyntheticDatasetGenerationMode generationMode,
+            string skeletonBuilderVersion)
+        {
+            string suffix = GetBuilderVersionFileSuffix(skeletonBuilderVersion);
+
+            switch (generationMode)
+            {
+                case SyntheticDatasetGenerationMode.BaseOnly:
+                    return "synthetic_turn_analysis_response_planner_skeleton_base_only" + suffix + ".csv";
+                case SyntheticDatasetGenerationMode.BasePlusVariants:
+                    return "synthetic_turn_analysis_response_planner_skeleton_base_plus_variants" + suffix + ".csv";
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(generationMode), generationMode, "Unknown generation mode.");
+            }
+        }
+
+        private static string GetSkeletonJsonFileName(
+            SyntheticDatasetGenerationMode generationMode,
+            string skeletonBuilderVersion)
+        {
+            string suffix = GetBuilderVersionFileSuffix(skeletonBuilderVersion);
+
+            switch (generationMode)
+            {
+                case SyntheticDatasetGenerationMode.BaseOnly:
+                    return "synthetic_turn_analysis_response_planner_skeleton_base_only" + suffix + ".json";
+                case SyntheticDatasetGenerationMode.BasePlusVariants:
+                    return "synthetic_turn_analysis_response_planner_skeleton_base_plus_variants" + suffix + ".json";
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(generationMode), generationMode, "Unknown generation mode.");
+            }
+        }
+
+        private static string GetSkeletonMarkdownFileName(
+            SyntheticDatasetGenerationMode generationMode,
+            string skeletonBuilderVersion)
+        {
+            string suffix = GetBuilderVersionFileSuffix(skeletonBuilderVersion);
+
+            switch (generationMode)
+            {
+                case SyntheticDatasetGenerationMode.BaseOnly:
+                    return "synthetic_turn_analysis_response_planner_skeleton_base_only" + suffix + ".md";
+                case SyntheticDatasetGenerationMode.BasePlusVariants:
+                    return "synthetic_turn_analysis_response_planner_skeleton_base_plus_variants" + suffix + ".md";
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(generationMode), generationMode, "Unknown generation mode.");
+            }
+        }
+
+        private static string GetBuilderVersionFileSuffix(string skeletonBuilderVersion)
+        {
+            if (string.IsNullOrEmpty(skeletonBuilderVersion))
+                return string.Empty;
+
+            return "_" + SanitizeFileNameToken(skeletonBuilderVersion);
+        }
+
+        private static string SanitizeFileNameToken(string value)
+        {
+            var builder = new StringBuilder(value.Length);
+
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if ((c >= 'a' && c <= 'z') ||
+                    (c >= 'A' && c <= 'Z') ||
+                    (c >= '0' && c <= '9'))
+                {
+                    builder.Append(c);
+                }
+                else
+                {
+                    builder.Append('_');
+                }
+            }
+
+            return builder.ToString();
+        }
     }
 
     internal sealed class TemporaryTurnAnalysisPlannerBatchResult
     {
         public TemporaryTurnAnalysisPlannerBatchResult(
             string csvPath,
+            string skeletonCsvPath,
+            string skeletonJsonPath,
+            string skeletonMarkdownPath,
             int totalRows,
+            int skeletonEvaluationRows,
             int baseCaseCount,
             int variantCaseCount,
             SyntheticDatasetGenerationMode generationMode)
         {
             CsvPath = csvPath;
+            SkeletonCsvPath = skeletonCsvPath;
+            SkeletonJsonPath = skeletonJsonPath;
+            SkeletonMarkdownPath = skeletonMarkdownPath;
             TotalRows = totalRows;
+            SkeletonEvaluationRows = skeletonEvaluationRows;
             BaseCaseCount = baseCaseCount;
             VariantCaseCount = variantCaseCount;
             GenerationMode = generationMode;
         }
 
         public string CsvPath { get; private set; }
+        public string SkeletonCsvPath { get; private set; }
+        public string SkeletonJsonPath { get; private set; }
+        public string SkeletonMarkdownPath { get; private set; }
         public int TotalRows { get; private set; }
+        public int SkeletonEvaluationRows { get; private set; }
         public int BaseCaseCount { get; private set; }
         public int VariantCaseCount { get; private set; }
         public SyntheticDatasetGenerationMode GenerationMode { get; private set; }
@@ -132,6 +284,16 @@ namespace IT4s.Diagnostics.Temporary
         public static ResponsePlanner CreateResponsePlanner()
         {
             return new ResponsePlanner();
+        }
+
+        public static SkeletonBuilder CreateSkeletonBuilder()
+        {
+            return new SkeletonBuilder();
+        }
+
+        public static SkeletonBuilderConfig CreateSkeletonBuilderConfig()
+        {
+            return new SkeletonBuilderConfig();
         }
 
         private static EnergyThresholds DefaultEnergyThresholds()

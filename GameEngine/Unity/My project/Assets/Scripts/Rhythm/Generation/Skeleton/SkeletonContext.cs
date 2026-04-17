@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace IT4s.Rhythm.Generation.Skeleton
 {
@@ -20,6 +21,33 @@ namespace IT4s.Rhythm.Generation.Skeleton
         public bool[] WeakMetricalSteps { get; set; }
         public float[] MetricalWeights { get; set; }
         public int[] SegmentByStep { get; set; }
+        public IReadOnlyList<int> ForcedEndingSteps
+        {
+            get
+            {
+                if (forcedEndingSteps == null)
+                    forcedEndingSteps = new List<int>();
+
+                return forcedEndingSteps.AsReadOnly();
+            }
+        }
+
+        private List<int> forcedEndingSteps;
+
+        public void RecordForcedEndingStep(int stepIndex)
+        {
+            if (forcedEndingSteps == null)
+                forcedEndingSteps = new List<int>();
+
+            if (!forcedEndingSteps.Contains(stepIndex))
+                forcedEndingSteps.Add(stepIndex);
+        }
+
+        public void ClearForcedEndingSteps()
+        {
+            if (forcedEndingSteps != null)
+                forcedEndingSteps.Clear();
+        }
 
         public float targetDensity
         {

@@ -37,6 +37,15 @@ namespace IT4s.Rhythm.ResponsePlanning
             return plan;
         }
 
+        public ResponsePlan PlanForResponseType(TurnAnalysisResult analysis, ResponseType responseType)
+        {
+            if (analysis == null)
+                throw new ArgumentNullException(nameof(analysis));
+
+            PlanningContext context = BuildContext(analysis, config);
+            return DerivePlan(context, responseType, config);
+        }
+
         private static PlanningContext BuildContext(TurnAnalysisResult analysis, ResponsePlannerConfig config)
         {
             DensityFeatures density = GetDensity(analysis);
