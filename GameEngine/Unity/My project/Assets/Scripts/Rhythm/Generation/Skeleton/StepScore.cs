@@ -19,6 +19,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
         public bool AdjacentToSource { get; set; }
         public bool NearSource { get; set; }
         public bool InterstitialSourceGap { get; set; }
+        public int DistanceToNearestSource { get; set; }
         public int LocalSourceDensity { get; set; }
         public float SegmentTargetWeight { get; set; } = 1f;
         public int SegmentIndex { get; set; } = -1;

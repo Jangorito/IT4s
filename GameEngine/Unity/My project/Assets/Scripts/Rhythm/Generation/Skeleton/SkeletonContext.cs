@@ -26,6 +26,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
         public bool[] AdjacentToSourceSteps { get; set; }
         public bool[] NearSourceSteps { get; set; }
         public bool[] InterstitialSourceGapSteps { get; set; }
+        public int[] DistanceToNearestSourceSteps { get; set; }
         public int[] LocalSourceDensity { get; set; }
         internal MetricStrengthLevel[] MetricStrengthLevels { get; set; }
         public float[] MetricalWeights { get; set; }

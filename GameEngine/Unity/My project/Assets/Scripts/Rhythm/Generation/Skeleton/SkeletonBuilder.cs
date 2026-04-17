@@ -76,17 +76,18 @@ namespace IT4s.Rhythm.Generation.Skeleton
             int segmentCount = GetSegmentCount(candidates);
             var state = new SelectionState(context.TotalSteps, segmentCount);
 
+            int profileMinSpacing = GetProfileMinSpacing(context);
             RunSelectionPass(
                 candidates,
                 context,
                 state,
                 targetCount,
-                context.MinSpacingSteps,
+                profileMinSpacing,
                 useSoftConstraints: true);
 
             if (state.SelectedCount < targetCount)
             {
-                for (int spacing = Math.Max(0, context.MinSpacingSteps - 1);
+                for (int spacing = Math.Max(0, profileMinSpacing - 1);
                      spacing >= 0 && state.SelectedCount < targetCount;
                      spacing--)
                 {
@@ -116,7 +117,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
             for (int i = 0; i < stepMeta.Length; i++)
             {
                 bool sourceAnchor = maps.SourceAnchors[i];
-                bool protectedAnchor = request.Plan.PreserveAnchors && sourceAnchor;
+                bool protectedAnchor = profile.PreserveAnchors && sourceAnchor;
                 float metricScore = ScoreMetric(
                     request.Config,
                     profile,
@@ -138,7 +139,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     maps.MetricalSalience[i],
                     maps.StrongBeats[i]);
                 float anchorScore = ScoreAnchor(
-                    request.Plan,
+                    profile,
                     request.Config,
                     sourceAnchor,
                     maps.ExplicitAnchors[i]);
@@ -277,6 +278,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     AdjacentToSource = meta.AdjacentToSource,
                     NearSource = meta.NearSource,
                     InterstitialSourceGap = meta.InterstitialSourceGap,
+                    DistanceToNearestSource = meta.DistanceToNearestSourceHit,
                     LocalSourceDensity = meta.LocalSourceDensity,
                     SegmentTargetWeight = meta.SegmentSourceWeight,
                     SegmentIndex = meta.SegmentIndex
@@ -308,6 +310,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
             var adjacentToSourceSteps = new bool[stepMeta.Length];
             var nearSourceSteps = new bool[stepMeta.Length];
             var interstitialSourceGapSteps = new bool[stepMeta.Length];
+            var distanceToNearestSourceSteps = new int[stepMeta.Length];
             var localSourceDensity = new int[stepMeta.Length];
             var metricStrengthLevels = new MetricStrengthLevel[stepMeta.Length];
             var metricalWeights = new float[stepMeta.Length];
@@ -325,6 +328,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 adjacentToSourceSteps[i] = stepMeta[i].AdjacentToSource;
                 nearSourceSteps[i] = stepMeta[i].NearSource;
                 interstitialSourceGapSteps[i] = stepMeta[i].InterstitialSourceGap;
+                distanceToNearestSourceSteps[i] = stepMeta[i].DistanceToNearestSourceHit;
                 localSourceDensity[i] = stepMeta[i].LocalSourceDensity;
                 metricStrengthLevels[i] = maps.MetricStrengthLevels[i];
                 metricalWeights[i] = stepMeta[i].MetricScore;
@@ -355,6 +359,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 AdjacentToSourceSteps = adjacentToSourceSteps,
                 NearSourceSteps = nearSourceSteps,
                 InterstitialSourceGapSteps = interstitialSourceGapSteps,
+                DistanceToNearestSourceSteps = distanceToNearestSourceSteps,
                 LocalSourceDensity = localSourceDensity,
                 MetricStrengthLevels = metricStrengthLevels,
                 MetricalWeights = metricalWeights,
@@ -399,6 +404,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     ResolveAdjacentToSource(stepScore, context, stepIndex),
                     ResolveNearSource(stepScore, context, stepIndex),
                     ResolveInterstitialSourceGap(stepScore, context, stepIndex),
+                    ResolveDistanceToNearestSource(stepScore, context, stepIndex),
                     ResolveLocalSourceDensity(stepScore, context, stepIndex),
                     ResolveMetricStrengthLevel(context, stepIndex, metricalWeight),
                     ResolveSegmentTargetWeight(stepScore, context, stepIndex, segmentIndex)));
@@ -507,6 +513,9 @@ namespace IT4s.Rhythm.Generation.Skeleton
             if (ViolatesSpacing(candidate, state, minSpacing))
                 return false;
 
+            if (ViolatesHardBehaviourCaps(candidate, candidates, context, state, targetCount))
+                return false;
+
             if (ShouldReserveEndingSlot(candidate, candidates, context, state, targetCount, minSpacing))
                 return false;
 
@@ -585,7 +594,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     return true;
 
                 case WeakStepPolicy.Defer:
-                    if (profile.ResponseType == ResponseType.Intensify)
+                    if (profile.MinMediumMetricRatio > 0f)
                         return state.SelectedCount < targetCount * profile.WeakStepSelectionPortion;
 
                     return candidate.SourceRelationScore < 0.12f;
@@ -615,12 +624,15 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
             if (profile.LimitDirectOverlap &&
                 candidate.SourceOccupied &&
-                candidate.AnchorPriority == AnchorPriority.NonAnchor &&
+                (!profile.PreserveAnchors || candidate.AnchorPriority == AnchorPriority.NonAnchor) &&
                 CountSelectedSourceOverlaps(candidates, state) >= GetAllowedDirectOverlapCount(profile, targetCount) &&
                 ExistsSelectableNonOverlapCandidate(candidates, state, minSpacing))
             {
                 return true;
             }
+
+            if (ShouldReserveRequiredBehaviourSlots(candidate, candidates, profile, state, targetCount, minSpacing))
+                return true;
 
             if (profile.SourceOverlapPolicy == SourceOverlapPolicy.Preserve &&
                 !candidate.SourceOccupied &&
@@ -666,6 +678,158 @@ namespace IT4s.Rhythm.Generation.Skeleton
             }
 
             return false;
+        }
+
+        private static bool ViolatesHardBehaviourCaps(
+            SelectionCandidate candidate,
+            List<SelectionCandidate> candidates,
+            SkeletonContext context,
+            SelectionState state,
+            int targetCount)
+        {
+            ResponseBehaviourProfile profile = context.BehaviourProfile;
+            if (profile == null || targetCount <= 0)
+                return false;
+
+            if (profile.EnforceStructuralSpineOnly &&
+                candidate.AnchorPriority == AnchorPriority.NonAnchor &&
+                candidate.MetricStrengthLevel != MetricStrengthLevel.Strongest &&
+                candidate.MetricStrengthLevel != MetricStrengthLevel.Strong)
+            {
+                return true;
+            }
+
+            if (candidate.SourceOccupied &&
+                (!profile.PreserveAnchors || candidate.AnchorPriority == AnchorPriority.NonAnchor) &&
+                CountSelectedSourceOverlaps(candidates, state) >= GetAllowedRatioCount(profile.MaxDirectOverlapRatio, targetCount))
+            {
+                return true;
+            }
+
+            if (candidate.IsWeakMetrical &&
+                candidate.AnchorPriority == AnchorPriority.NonAnchor &&
+                CountSelectedWhere(candidates, state, IsWeakCandidate) >= GetAllowedRatioCount(profile.MaxWeakStepRatio, targetCount))
+            {
+                return true;
+            }
+
+            if (IsFarGapCandidate(candidate) &&
+                CountSelectedWhere(candidates, state, IsFarGapCandidate) >= GetAllowedRatioCount(profile.MaxFarGapRatio, targetCount))
+            {
+                return true;
+            }
+
+            if (profile.MaxAdjacentRunLength < int.MaxValue &&
+                WouldExceedAdjacentRunLength(candidate, state, profile.MaxAdjacentRunLength))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool ShouldReserveRequiredBehaviourSlots(
+            SelectionCandidate candidate,
+            List<SelectionCandidate> candidates,
+            ResponseBehaviourProfile profile,
+            SelectionState state,
+            int targetCount,
+            int minSpacing)
+        {
+            int slotsRemainingAfterCandidate = targetCount - state.SelectedCount - 1;
+            if (slotsRemainingAfterCandidate < 0)
+                return false;
+
+            if (NeedsReservedSlot(
+                candidate,
+                candidates,
+                state,
+                targetCount,
+                minSpacing,
+                profile.MinInterstitialRatio,
+                IsInterstitialCandidate))
+            {
+                return true;
+            }
+
+            if (NeedsReservedSlot(
+                candidate,
+                candidates,
+                state,
+                targetCount,
+                minSpacing,
+                profile.MinAdjacentToSourceRatio,
+                IsAdjacentDisplacementCandidate))
+            {
+                return true;
+            }
+
+            if (NeedsReservedSlot(
+                candidate,
+                candidates,
+                state,
+                targetCount,
+                minSpacing,
+                profile.MinExpansionRatio,
+                IsExpansionCandidate))
+            {
+                return true;
+            }
+
+            if (NeedsReservedSlot(
+                candidate,
+                candidates,
+                state,
+                targetCount,
+                minSpacing,
+                profile.MinMediumMetricRatio,
+                IsMediumMetricCandidate))
+            {
+                return true;
+            }
+
+            if (profile.MinLateSegmentRatio > 0f)
+            {
+                int lastSegment = state.SegmentCounts.Length - 1;
+                if (NeedsReservedSlot(
+                    candidate,
+                    candidates,
+                    state,
+                    targetCount,
+                    minSpacing,
+                    profile.MinLateSegmentRatio,
+                    c => c.SegmentIndex == lastSegment))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool NeedsReservedSlot(
+            SelectionCandidate candidate,
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int targetCount,
+            int minSpacing,
+            float requiredRatio,
+            Predicate<SelectionCandidate> predicate)
+        {
+            int requiredCount = GetRequiredRatioCount(requiredRatio, targetCount);
+            if (requiredCount <= 0 || predicate(candidate))
+                return false;
+
+            int selectedCount = CountSelectedWhere(candidates, state, predicate);
+            int stillNeeded = requiredCount - selectedCount;
+            if (stillNeeded <= 0)
+                return false;
+
+            int slotsRemainingAfterCandidate = targetCount - state.SelectedCount - 1;
+            if (slotsRemainingAfterCandidate > stillNeeded - 1)
+                return false;
+
+            return ExistsSelectableCandidate(candidates, state, minSpacing, predicate);
         }
 
         private static bool ShouldDeferForSegmentBalance(
@@ -723,9 +887,24 @@ namespace IT4s.Rhythm.Generation.Skeleton
             ResponseBehaviourProfile profile,
             int targetCount)
         {
-            float limit = profile.DirectOverlapSoftLimit;
-            int allowed = (int)Math.Floor(targetCount * limit);
+            float limit = Math.Min(profile.DirectOverlapSoftLimit, profile.MaxDirectOverlapRatio);
+            return GetAllowedRatioCount(limit, targetCount);
+        }
+
+        private static int GetAllowedRatioCount(float ratio, int targetCount)
+        {
+            float clampedRatio = Clamp01(ratio);
+            int allowed = (int)Math.Floor(targetCount * clampedRatio);
             return Math.Max(0, allowed);
+        }
+
+        private static int GetRequiredRatioCount(float ratio, int targetCount)
+        {
+            float clampedRatio = Clamp01(ratio);
+            if (clampedRatio <= 0f || targetCount <= 0)
+                return 0;
+
+            return Math.Max(1, (int)Math.Ceiling(targetCount * clampedRatio));
         }
 
         private static bool ExistsSelectableNonOverlapCandidate(
@@ -796,6 +975,25 @@ namespace IT4s.Rhythm.Generation.Skeleton
             return false;
         }
 
+        private static bool ExistsSelectableCandidate(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int minSpacing,
+            Predicate<SelectionCandidate> predicate)
+        {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                SelectionCandidate candidate = candidates[i];
+                if (predicate(candidate) &&
+                    CandidatePassesBaseConstraints(candidate, state, minSpacing))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static bool HasSelectedExpansion(
             List<SelectionCandidate> candidates,
             SelectionState state)
@@ -833,6 +1031,70 @@ namespace IT4s.Rhythm.Generation.Skeleton
             return !candidate.SourceOccupied &&
                    candidate.NearSource &&
                    candidate.MetricStrengthLevel != MetricStrengthLevel.Weak;
+        }
+
+        private static bool IsAdjacentDisplacementCandidate(SelectionCandidate candidate)
+        {
+            return !candidate.SourceOccupied && candidate.AdjacentToSource;
+        }
+
+        private static bool IsMediumMetricCandidate(SelectionCandidate candidate)
+        {
+            return candidate.MetricStrengthLevel == MetricStrengthLevel.Medium;
+        }
+
+        private static bool IsWeakCandidate(SelectionCandidate candidate)
+        {
+            return candidate.IsWeakMetrical;
+        }
+
+        private static bool IsFarGapCandidate(SelectionCandidate candidate)
+        {
+            return !candidate.SourceOccupied &&
+                   !candidate.NearSource &&
+                   candidate.DistanceToNearestSource > 2;
+        }
+
+        private static int CountSelectedWhere(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            Predicate<SelectionCandidate> predicate)
+        {
+            int count = 0;
+            for (int i = 0; i < state.SelectedSteps.Count; i++)
+            {
+                SelectionCandidate candidate = FindCandidateByStep(candidates, state.SelectedSteps[i]);
+                if (candidate != null && predicate(candidate))
+                    count++;
+            }
+
+            return count;
+        }
+
+        private static bool WouldExceedAdjacentRunLength(
+            SelectionCandidate candidate,
+            SelectionState state,
+            int maxAdjacentRunLength)
+        {
+            if (maxAdjacentRunLength <= 0)
+                return true;
+
+            int runLength = 1;
+            for (int step = candidate.StepIndex - 1;
+                 step >= 0 && state.ActiveSteps[step];
+                 step--)
+            {
+                runLength++;
+            }
+
+            for (int step = candidate.StepIndex + 1;
+                 step < state.ActiveSteps.Length && state.ActiveSteps[step];
+                 step++)
+            {
+                runLength++;
+            }
+
+            return runLength > maxAdjacentRunLength;
         }
 
         private static void EnsureEndingSelection(
@@ -884,9 +1146,28 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     candidates,
                     state,
                     targetCount,
-                    Math.Max(0, context.MinSpacingSteps - 1),
-                    IsInterstitialCandidate);
+                    Math.Max(0, GetProfileMinSpacing(context) - 1),
+                    IsInterstitialCandidate,
+                    profile);
             }
+
+            EnsureMinimumRatio(
+                candidates,
+                state,
+                targetCount,
+                Math.Max(0, GetProfileMinSpacing(context) - 1),
+                profile.MinInterstitialRatio,
+                IsInterstitialCandidate,
+                profile);
+
+            EnsureMinimumRatio(
+                candidates,
+                state,
+                targetCount,
+                Math.Max(0, GetProfileMinSpacing(context) - 1),
+                profile.MinAdjacentToSourceRatio,
+                IsAdjacentDisplacementCandidate,
+                profile);
 
             if (profile.GuaranteeExpansion && !HasSelectedExpansion(candidates, state))
             {
@@ -894,8 +1175,40 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     candidates,
                     state,
                     targetCount,
-                    Math.Max(0, context.MinSpacingSteps - 1),
-                    IsExpansionCandidate);
+                    Math.Max(0, GetProfileMinSpacing(context) - 1),
+                    IsExpansionCandidate,
+                    profile);
+            }
+
+            EnsureMinimumRatio(
+                candidates,
+                state,
+                targetCount,
+                Math.Max(0, GetProfileMinSpacing(context) - 1),
+                profile.MinExpansionRatio,
+                IsExpansionCandidate,
+                profile);
+
+            EnsureMinimumRatio(
+                candidates,
+                state,
+                targetCount,
+                Math.Max(0, GetProfileMinSpacing(context) - 1),
+                profile.MinMediumMetricRatio,
+                IsMediumMetricCandidate,
+                profile);
+
+            if (profile.MinLateSegmentRatio > 0f)
+            {
+                int lastSegment = state.SegmentCounts.Length - 1;
+                EnsureMinimumRatio(
+                    candidates,
+                    state,
+                    targetCount,
+                    Math.Max(0, GetProfileMinSpacing(context) - 1),
+                    profile.MinLateSegmentRatio,
+                    c => c.SegmentIndex == lastSegment,
+                    profile);
             }
 
             if (profile.GuaranteeLateDrive && !state.HasEnding)
@@ -904,8 +1217,29 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     candidates,
                     state,
                     targetCount,
-                    Math.Max(0, context.MinSpacingSteps - 1),
-                    IsLateDriveCandidate);
+                    Math.Max(0, GetProfileMinSpacing(context) - 1),
+                    IsLateDriveCandidate,
+                    profile);
+            }
+        }
+
+        private static void EnsureMinimumRatio(
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int targetCount,
+            int minSpacing,
+            float requiredRatio,
+            Predicate<SelectionCandidate> predicate,
+            ResponseBehaviourProfile profile)
+        {
+            int requiredCount = GetRequiredRatioCount(requiredRatio, targetCount);
+            int guard = 0;
+            while (CountSelectedWhere(candidates, state, predicate) < requiredCount &&
+                   guard < requiredCount + targetCount)
+            {
+                guard++;
+                if (!TryEnsureCandidate(candidates, state, targetCount, minSpacing, predicate, profile))
+                    break;
             }
         }
 
@@ -914,9 +1248,10 @@ namespace IT4s.Rhythm.Generation.Skeleton
             SelectionState state,
             int targetCount,
             int minSpacing,
-            Predicate<SelectionCandidate> predicate)
+            Predicate<SelectionCandidate> predicate,
+            ResponseBehaviourProfile profile)
         {
-            SelectionCandidate candidate = FindBestSelectableCandidate(candidates, state, minSpacing, predicate);
+            SelectionCandidate candidate = FindBestSelectableCandidate(candidates, state, targetCount, minSpacing, predicate, profile);
             if (candidate != null && state.SelectedCount < targetCount)
             {
                 SelectCandidate(candidate, state);
@@ -931,7 +1266,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
                 SelectionCandidate removedCandidate = FindCandidateByStep(candidates, state.SelectedSteps[replacementIndex]);
                 RemoveSelectedAt(candidates, state, replacementIndex);
-                candidate = FindBestSelectableCandidate(candidates, state, minSpacing, predicate);
+                candidate = FindBestSelectableCandidate(candidates, state, targetCount, minSpacing, predicate, profile);
                 if (candidate != null)
                 {
                     SelectCandidate(candidate, state);
@@ -950,7 +1285,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
 
             SelectionCandidate relaxedRemovedCandidate = FindCandidateByStep(candidates, state.SelectedSteps[relaxedReplacementIndex]);
             RemoveSelectedAt(candidates, state, relaxedReplacementIndex);
-            candidate = FindBestSelectableCandidate(candidates, state, 0, predicate);
+            candidate = FindBestSelectableCandidate(candidates, state, targetCount, 0, predicate, profile);
             if (candidate == null)
             {
                 if (relaxedRemovedCandidate != null)
@@ -966,14 +1301,17 @@ namespace IT4s.Rhythm.Generation.Skeleton
         private static SelectionCandidate FindBestSelectableCandidate(
             List<SelectionCandidate> candidates,
             SelectionState state,
+            int targetCount,
             int minSpacing,
-            Predicate<SelectionCandidate> predicate)
+            Predicate<SelectionCandidate> predicate,
+            ResponseBehaviourProfile profile)
         {
             for (int i = 0; i < candidates.Count; i++)
             {
                 SelectionCandidate candidate = candidates[i];
                 if (predicate(candidate) &&
-                    CandidatePassesBaseConstraints(candidate, state, minSpacing))
+                    CandidatePassesBaseConstraints(candidate, state, minSpacing) &&
+                    CandidatePassesProfileCaps(candidate, candidates, state, targetCount, profile))
                 {
                     return candidate;
                 }
@@ -1222,6 +1560,43 @@ namespace IT4s.Rhythm.Generation.Skeleton
                    !ViolatesSpacing(candidate, state, minSpacing);
         }
 
+        private static bool CandidatePassesProfileCaps(
+            SelectionCandidate candidate,
+            List<SelectionCandidate> candidates,
+            SelectionState state,
+            int targetCount,
+            ResponseBehaviourProfile profile)
+        {
+            if (profile == null || targetCount <= 0)
+                return true;
+
+            if (candidate.SourceOccupied &&
+                CountSelectedSourceOverlaps(candidates, state) >= GetAllowedRatioCount(profile.MaxDirectOverlapRatio, targetCount))
+            {
+                return false;
+            }
+
+            if (candidate.IsWeakMetrical &&
+                CountSelectedWhere(candidates, state, IsWeakCandidate) >= GetAllowedRatioCount(profile.MaxWeakStepRatio, targetCount))
+            {
+                return false;
+            }
+
+            if (IsFarGapCandidate(candidate) &&
+                CountSelectedWhere(candidates, state, IsFarGapCandidate) >= GetAllowedRatioCount(profile.MaxFarGapRatio, targetCount))
+            {
+                return false;
+            }
+
+            if (profile.MaxAdjacentRunLength < int.MaxValue &&
+                WouldExceedAdjacentRunLength(candidate, state, profile.MaxAdjacentRunLength))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         private static bool ViolatesSpacing(
             SelectionCandidate candidate,
             SelectionState state,
@@ -1311,6 +1686,9 @@ namespace IT4s.Rhythm.Generation.Skeleton
             SkeletonContext context,
             int stepIndex)
         {
+            if (!context.PreserveAnchors)
+                return AnchorPriority.NonAnchor;
+
             if (IsTrue(context.ExplicitAnchors, stepIndex) || stepScore.IsExplicitAnchor)
                 return AnchorPriority.Explicit;
 
@@ -1423,6 +1801,17 @@ namespace IT4s.Rhythm.Generation.Skeleton
             return stepScore.InterstitialSourceGap;
         }
 
+        private static int ResolveDistanceToNearestSource(
+            StepScore stepScore,
+            SkeletonContext context,
+            int stepIndex)
+        {
+            if (HasValue(context.DistanceToNearestSourceSteps, stepIndex))
+                return Math.Max(0, context.DistanceToNearestSourceSteps[stepIndex]);
+
+            return Math.Max(0, stepScore.DistanceToNearestSource);
+        }
+
         private static int ResolveLocalSourceDensity(
             StepScore stepScore,
             SkeletonContext context,
@@ -1490,6 +1879,16 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 return totalSteps;
 
             return targetCount;
+        }
+
+        private static int GetProfileMinSpacing(SkeletonContext context)
+        {
+            int spacing = context.MinSpacingSteps;
+            ResponseBehaviourProfile profile = context.BehaviourProfile;
+            if (profile != null)
+                spacing += profile.SelectionSpacingOffset;
+
+            return Math.Max(0, spacing);
         }
 
         private static int GetSegmentCount(List<SelectionCandidate> candidates)
@@ -1609,7 +2008,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
             float strongBeatBoost = isStrongBeat
                 ? Math.Min(1f - weightedSalience, 0.20f * strongBeatWeight)
                 : 0f;
-            float profileBias = profile != null ? profile.GetMetricClassBias(strengthLevel) : 0f;
+            float profileBias = profile != null ? profile.GetMetricProfileBias(strengthLevel) : 0f;
 
             return SanitizeScore(
                 Clamp01(weightedSalience + strongBeatBoost + profileBias));
@@ -1693,44 +2092,19 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 relation += 0.12f + (1f - metricSalience) * 0.10f;
             }
 
-            float rawScore = relation * GetSourceRelationResponseTypeMultiplier(profile.ResponseType);
+            float rawScore = relation * profile.SourceRelationMultiplier;
             float scaled = rawScore * config.SourceRelationScale;
 
             return SanitizeScore(ClampMagnitude(scaled, config.SourceRelationMaxMagnitude));
         }
 
-        private static float GetSourceRelationResponseTypeMultiplier(ResponseType responseType)
-        {
-            switch (responseType)
-            {
-                case ResponseType.Mirror:
-                    return 1.2f;
-
-                case ResponseType.Complement:
-                    return 1.25f;
-
-                case ResponseType.Fill:
-                case ResponseType.Contrast:
-                    return 1.3f;
-
-                case ResponseType.Simplify:
-                    return 0.85f;
-
-                case ResponseType.Intensify:
-                    return 1.1f;
-
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(responseType), responseType, "Unknown response type.");
-            }
-        }
-
         private static float ScoreAnchor(
-            ResponsePlan plan,
+            ResponseBehaviourProfile profile,
             SkeletonBuilderConfig config,
             bool sourceAnchor,
             bool isExplicitAnchor)
         {
-            if (!plan.PreserveAnchors || !sourceAnchor)
+            if (profile == null || !profile.PreserveAnchors || !sourceAnchor)
                 return 0f;
 
             float anchorScale = isExplicitAnchor ? AnchorExplicitScale : AnchorFallbackScale;
@@ -1910,7 +2284,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                     throw new ArgumentOutOfRangeException(nameof(profile.MetricTolerancePolicy), profile.MetricTolerancePolicy, "Unknown metric tolerance policy.");
             }
 
-            if (profile.ResponseType == ResponseType.Intensify &&
+            if (profile.MinMediumMetricRatio > 0f &&
                 targetDensity > 0.45f &&
                 strengthLevel == MetricStrengthLevel.Medium)
             {
@@ -2107,6 +2481,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 bool adjacentToSource,
                 bool nearSource,
                 bool interstitialSourceGap,
+                int distanceToNearestSource,
                 int localSourceDensity,
                 MetricStrengthLevel metricStrengthLevel,
                 float segmentTargetWeight)
@@ -2123,6 +2498,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 AdjacentToSource = adjacentToSource;
                 NearSource = nearSource;
                 InterstitialSourceGap = interstitialSourceGap;
+                DistanceToNearestSource = distanceToNearestSource;
                 LocalSourceDensity = localSourceDensity;
                 MetricStrengthLevel = metricStrengthLevel;
                 SegmentTargetWeight = segmentTargetWeight;
@@ -2140,6 +2516,7 @@ namespace IT4s.Rhythm.Generation.Skeleton
             public bool AdjacentToSource { get; private set; }
             public bool NearSource { get; private set; }
             public bool InterstitialSourceGap { get; private set; }
+            public int DistanceToNearestSource { get; private set; }
             public int LocalSourceDensity { get; private set; }
             public MetricStrengthLevel MetricStrengthLevel { get; private set; }
             public float SegmentTargetWeight { get; private set; }

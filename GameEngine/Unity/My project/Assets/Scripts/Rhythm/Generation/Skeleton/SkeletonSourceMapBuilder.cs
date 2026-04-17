@@ -162,10 +162,12 @@ namespace IT4s.Rhythm.Generation.Skeleton
                 distanceToNearestSource[i] = nearest;
                 adjacentToSource[i] = !sourceOccupied[i] && nearest == 1;
                 nearSource[i] = !sourceOccupied[i] && nearest > 0 && nearest <= 2;
+                localSourceDensity[i] = CountLocalSourceHits(sourceOccupied, i, 2);
                 interstitialSourceGap[i] = !sourceOccupied[i] &&
                                            previousDistance <= stepCount &&
-                                           nextDistance <= stepCount;
-                localSourceDensity[i] = CountLocalSourceHits(sourceOccupied, i, 2);
+                                           nextDistance <= stepCount &&
+                                           (previousDistance + nextDistance <= 6 ||
+                                            localSourceDensity[i] > 1);
             }
 
             return new SkeletonSourceNeighbourhoodMap(
