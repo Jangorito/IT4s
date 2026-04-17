@@ -19,7 +19,7 @@ namespace IT4s.Diagnostics.Temporary
     /// </summary>
     internal sealed class TemporaryTurnAnalysisPlannerBatchRunner
     {
-        private const string DefaultSkeletonBuilderVersion = "SkeletonBuilder.PostArchitectureRevamp";
+        private const string DefaultSkeletonBuilderVersion = "SkeletonBuilder.PostArchitectureRevamp_v2";
         private const int EvaluatedResponseTypeCount = 6;
 
         public TemporaryTurnAnalysisPlannerBatchResult Run(

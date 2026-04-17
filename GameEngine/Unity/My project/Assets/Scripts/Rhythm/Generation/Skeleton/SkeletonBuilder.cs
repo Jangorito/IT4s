@@ -2270,6 +2270,15 @@ namespace IT4s.Rhythm.Generation.Skeleton
                         score += 0.025f;
                     break;
 
+                case MetricTolerancePolicy.MediumPropulsion:
+                    if (strengthLevel == MetricStrengthLevel.Medium)
+                        score += 0.075f;
+                    else if (strengthLevel == MetricStrengthLevel.Strong)
+                        score += 0.015f;
+                    else if (strengthLevel == MetricStrengthLevel.Weak)
+                        score -= 0.015f;
+                    break;
+
                 case MetricTolerancePolicy.StrongAndMedium:
                     if (strengthLevel == MetricStrengthLevel.Medium)
                         score += 0.015f;
