@@ -48,3 +48,4 @@ AudioEngine/*.elf
 ############################
 *.log
 GameEngine/Unity/My project/Assets/Chunity/Plugins/x86_64/AudioPluginChuck.dll
+Literature/.tools/
