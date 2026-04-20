@@ -40,6 +40,16 @@ namespace IT4s.Bootstrap
         [SerializeField] private int stepsPerQuarter = 12;
         [SerializeField] private int sampleRate = BelaSampleRateHz;
 
+        [Header("Loop Closure")]
+        [SerializeField]
+        [Tooltip("When enabled, the controller returns to WaitingForHuman after the AI response playback duration elapses.")]
+        private bool returnToWaitingAfterAiPlayback;
+
+        [SerializeField]
+        [Min(0f)]
+        [Tooltip("Small grace period added after the estimated AI response duration before re-arming human input.")]
+        private float aiPlaybackCompletionPaddingSeconds = 0.05f;
+
         private PatternCompiler patternCompiler;
         private FeatureTransformer featureTransformer;
         private TurnAnalyser turnAnalyser;
@@ -89,6 +99,10 @@ namespace IT4s.Bootstrap
                 oscHitReceiver,
                 skeletonBuilder,
                 skeletonBuilderConfig);
+
+            turnLoopController.ConfigureReturnToWaitingAfterAiPlayback(
+                returnToWaitingAfterAiPlayback,
+                aiPlaybackCompletionPaddingSeconds);
 
             Debug.Log($"[TurnLoopBootstrap] Turn loop collaborators wired with timing {initialTimingConfig}.");
         }

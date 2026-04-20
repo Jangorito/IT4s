@@ -104,6 +104,10 @@ namespace IT4s.Orchestration
         [Tooltip("Temporary debug key used to manually re-arm the loop for another human capture.")]
         private KeyCode debugRearmKey = KeyCode.Space;
 
+        private bool returnToWaitingAfterAiPlayback;
+        private float aiPlaybackCompletionPaddingSeconds = 0.05f;
+        private float aiPlaybackCompletionRealtimeSeconds = -1f;
+
         // These are plain C# collaborators rather than scene components, so they are expected
         // to be supplied by a composition root or setup code through InjectDependencies(...).
         // The controller never creates them internally because orchestration should only coordinate.
@@ -122,6 +126,8 @@ namespace IT4s.Orchestration
         public MusicalTimingConfig CurrentMusicalTiming => currentMusicalTiming;
         public bool DebugRearmHotkeyEnabled => enableDebugRearmHotkey;
         public KeyCode DebugRearmKey => debugRearmKey;
+        public bool ReturnToWaitingAfterAiPlaybackEnabled => returnToWaitingAfterAiPlayback;
+        public float AiPlaybackCompletionPaddingSeconds => aiPlaybackCompletionPaddingSeconds;
 
         // Running state is kept separate from CurrentPhase so the loop can be paused or stopped
         // without needing extra domain phases before they are truly justified.
@@ -224,6 +230,27 @@ namespace IT4s.Orchestration
         }
 
         /// <summary>
+        /// Enables the optional closed-loop hand-off after AI playback.
+        /// The completion estimate is intentionally timer-based so the feature can be used with
+        /// the current ChucK bridge, which does not yet publish playback-complete callbacks.
+        /// </summary>
+        public void ConfigureReturnToWaitingAfterAiPlayback(bool enabled, float completionPaddingSeconds = 0.05f)
+        {
+            returnToWaitingAfterAiPlayback = enabled;
+            aiPlaybackCompletionPaddingSeconds = Mathf.Max(0f, completionPaddingSeconds);
+
+            if (!returnToWaitingAfterAiPlayback)
+            {
+                ClearScheduledAiPlaybackLoopClosure();
+            }
+
+            EmitDebugMessage(
+                "Return-to-waiting after AI playback " +
+                $"{(returnToWaitingAfterAiPlayback ? "enabled" : "disabled")} " +
+                $"(padding={aiPlaybackCompletionPaddingSeconds:0.###}s).");
+        }
+
+        /// <summary>
         /// Activates the orchestration loop and moves it into the human-ready idle state.
         /// No turn logic is executed here yet; this simply establishes the initial phase.
         /// </summary>
@@ -243,6 +270,7 @@ namespace IT4s.Orchestration
             }
 
             isRunning = true;
+            ClearScheduledAiPlaybackLoopClosure();
             ClearCaptureRuntimeState();
             EmitDebugMessage($"Turn loop started. {DescribeDependencyState()}");
             SetPhase(TurnPhase.WaitingForHuman);
@@ -304,6 +332,7 @@ namespace IT4s.Orchestration
             }
 
             isRunning = false;
+            ClearScheduledAiPlaybackLoopClosure();
             ClearCaptureRuntimeState();
             SetPhase(TurnPhase.Transition);
             EmitDebugMessage("Turn loop stopped.");
@@ -339,9 +368,7 @@ namespace IT4s.Orchestration
                     break;
 
                 case TurnPhase.PlayingAiResponse:
-                    // Future implementation:
-                    // Hand the generated response to IT4ChuckTurnPlayer and observe completion so the
-                    // loop can return cleanly to the next waiting or transition state.
+                    TickPlayingAiResponse(Time.unscaledTime);
                     break;
 
                 case TurnPhase.Transition:
@@ -392,6 +419,7 @@ namespace IT4s.Orchestration
                 TryDisengageAiPlaybackForDebugRearm();
             }
 
+            ClearScheduledAiPlaybackLoopClosure();
             ClearCaptureRuntimeState();
             SetPhase(TurnPhase.WaitingForHuman);
             EmitDebugMessage($"Debug re-arm returned the turn loop to {TurnPhase.WaitingForHuman}.");
@@ -458,6 +486,91 @@ namespace IT4s.Orchestration
             {
                 Debug.LogWarning($"[TurnLoopController] Debug re-arm could not stop AI playback cleanly: {ex.Message}");
             }
+        }
+
+        private void TickPlayingAiResponse(float nowRealtimeSeconds)
+        {
+            if (!returnToWaitingAfterAiPlayback)
+            {
+                return;
+            }
+
+            if (aiPlaybackCompletionRealtimeSeconds < 0f)
+            {
+                if (!HasLastGeneratedAiPatternTurn || LastGeneratedAiPatternTurn == null)
+                {
+                    Debug.LogWarning(
+                        "[TurnLoopController] Automatic loop closure is enabled, but no generated AI pattern is available to estimate playback completion.");
+                    return;
+                }
+
+                ScheduleAiPlaybackLoopClosure(LastGeneratedAiPatternTurn, nowRealtimeSeconds);
+            }
+
+            if (nowRealtimeSeconds < aiPlaybackCompletionRealtimeSeconds)
+            {
+                return;
+            }
+
+            CompleteAiPlaybackAndReturnToWaiting();
+        }
+
+        private void ScheduleAiPlaybackLoopClosure(PatternTurn pattern, float nowRealtimeSeconds)
+        {
+            if (!returnToWaitingAfterAiPlayback || pattern == null)
+            {
+                ClearScheduledAiPlaybackLoopClosure();
+                return;
+            }
+
+            float estimatedDurationSeconds = EstimatePlaybackDurationSeconds(pattern);
+            aiPlaybackCompletionRealtimeSeconds =
+                nowRealtimeSeconds + estimatedDurationSeconds + aiPlaybackCompletionPaddingSeconds;
+
+            EmitDebugMessage(
+                $"Automatic loop closure scheduled for AI turn {pattern.turnId}: " +
+                $"duration={estimatedDurationSeconds:0.###}s, " +
+                $"padding={aiPlaybackCompletionPaddingSeconds:0.###}s.");
+        }
+
+        private void CompleteAiPlaybackAndReturnToWaiting()
+        {
+            if (!isRunning || CurrentPhase != TurnPhase.PlayingAiResponse)
+            {
+                return;
+            }
+
+            ClearScheduledAiPlaybackLoopClosure();
+            ClearCaptureRuntimeState();
+            SetPhase(TurnPhase.WaitingForHuman);
+            EmitDebugMessage($"AI playback completed. Returning to {TurnPhase.WaitingForHuman}.");
+        }
+
+        private void ClearScheduledAiPlaybackLoopClosure()
+        {
+            aiPlaybackCompletionRealtimeSeconds = -1f;
+        }
+
+        private static float EstimatePlaybackDurationSeconds(PatternTurn pattern)
+        {
+            if (pattern == null)
+            {
+                return 0f;
+            }
+
+            if (pattern.sampleRate > 0 && pattern.endSamples > pattern.startSamples)
+            {
+                return Mathf.Max(0f, (float)((pattern.endSamples - pattern.startSamples) / (double)pattern.sampleRate));
+            }
+
+            if (pattern.StepCount > 0 && pattern.bpm > 0f && pattern.stepsPerQuarter > 0)
+            {
+                float secondsPerQuarter = 60f / pattern.bpm;
+                float secondsPerStep = secondsPerQuarter / pattern.stepsPerQuarter;
+                return Mathf.Max(0f, pattern.StepCount * secondsPerStep);
+            }
+
+            return 0f;
         }
 
         private string DescribeDependencyState()
@@ -806,6 +919,7 @@ namespace IT4s.Orchestration
             {
                 EmitDebugMessage($"Triggering AI playback for turn {LastGeneratedAiPatternTurn.turnId}.");
                 aiTurnPlayer.PlayTurn(LastGeneratedAiPatternTurn);
+                ScheduleAiPlaybackLoopClosure(LastGeneratedAiPatternTurn, Time.unscaledTime);
                 EmitDebugMessage(
                     $"AI playback triggered for turn {LastGeneratedAiPatternTurn.turnId}. Advancing to PlayingAiResponse.");
 
@@ -1020,6 +1134,7 @@ namespace IT4s.Orchestration
             }
 
             isRunning = false;
+            ClearScheduledAiPlaybackLoopClosure();
             ClearCaptureRuntimeState();
             ClearAnalysisAndPlanningRuntimeState();
             ClearGeneratedAiResponseState();
