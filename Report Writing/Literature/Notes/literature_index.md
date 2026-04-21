@@ -7,6 +7,7 @@ This index summarises parsed literature for the Intelli-Trading Fours dissertati
 | Source | Status | Parsing Quality | Core Use | Source Card |
 |---|---|---|---|---|
 | Baird, Blevins, and Zahler 1993 | parsed | good | interactive computer performer, timing, ensemble following | [card](source_cards/baird_1993_interactive_computer_performer.md) |
+| Bouwer et al. 2026 | parsed | good | abstract rhythm representation, temporal expectation, pattern perception/production | [card](source_cards/bouwer_2026_abstract_rhythm_representations.md) |
 | Donnay et al. 2014 | parsed | good | trading fours, musical dialogue, interactive improvisation | [card](source_cards/donnay_2014_trading_fours_fmri.md) |
 | Eigenfeldt 2016 | parsed | good | musebots, autonomous MuMe agents | [card](source_cards/eigenfeldt_2016_musebots_one_year.md) |
 | Gillick et al. 2019 | parsed | good | drum generation, groove, humanisation, future work | [card](source_cards/gillick_2019_learning_to_groove.md) |
@@ -27,6 +28,7 @@ This index summarises parsed literature for the Intelli-Trading Fours dissertati
 | Smith 2022 | parsed | good | human-AI partnerships and creative agency | [card](source_cards/smith_2022_human_ai_partnerships.md) |
 | Temperley 2009 | parsed | good | symbolic music analysis and metrical inference | [card](source_cards/temperley_2009_unified_probabilistic_polyphonic_analysis.md) |
 | Thom 2000 | parsed | good | real-time interactive improvisation and BoB | [card](source_cards/thom_2000_realtime_interactive_improvisation.md) |
+| Thaut, Trimarchi, and Parsons 2014 | parsed | good | neural and cognitive separation of rhythm pattern, meter, and tempo | [card](source_cards/thaut_2014_rhythm_perception_neural_substrates.md) |
 | Toussaint 2004 | parsed | good | cyclic binary rhythm representation and evenness | [card](source_cards/toussaint_2004_computational_geometric_rhythm.md) |
 | Toussaint 2010 | parsed | good | algorithmic rhythm generation and complementarity | [card](source_cards/toussaint_2010_good_rhythms_algorithmically.md) |
 | Vaggione 1993 | parsed | good | determinism, emergence, and models of musical time | [card](source_cards/vaggione_1993_models_of_time.md) |
@@ -74,6 +76,8 @@ This index summarises parsed literature for the Intelli-Trading Fours dissertati
 | Source | Key Ideas | Useful Dissertation Sections |
 |---|---|---|
 | Levitin, Grahn, and London 2018 | Rhythm, pulse, tempo, movement, synchronization, entrainment, groove. | 2.4, 4, 7.6 |
+| Thaut, Trimarchi, and Parsons 2014 | Rhythm as separable pattern, meter, and tempo components. | 2.4, 2.6, 5 |
+| Bouwer et al. 2026 | Abstract rhythmic pattern representations and temporal expectation. | 2.4, 2.6, 4.5, 5 |
 | Baird, Blevins, and Zahler 1993 | Tempo following and ensemble responsiveness. | 2.2, 2.4, 3.6 |
 | Hoffman and Weinberg 2011 | Real-time synchronization and anticipatory action. | 2.4, 7.6 |
 | Scheirer 2000 | Tempo perception and music-listening systems. | 2.4, 5.1 |
@@ -84,6 +88,7 @@ This index summarises parsed literature for the Intelli-Trading Fours dissertati
 | Source | Key Ideas | Useful Dissertation Sections |
 |---|---|---|
 | Toussaint 2004 | Rhythm as cyclic binary onset/silence structure. | 2.4, 4.5 |
+| Bouwer et al. 2026 | Rhythmic patterns represented through IOI, ratio, and contour abstractions. | 2.6, 4.5, 5 |
 | Longuet-Higgins and Lee 1984 | Rhythmic ambiguity, metrical interpretation, grouping. | 2.4, 2.6, 4.4 |
 | Gillick et al. 2019 | Quantisation/humanization as paired drum transformations. | 4.4, 8.5 |
 | Temperley 2009 | Symbolic music analysis and metrical inference. | 2.6, 5 |
@@ -96,6 +101,8 @@ This index summarises parsed literature for the Intelli-Trading Fours dissertati
 | Longuet-Higgins and Lee 1984 | Listeners resolve rhythmic ambiguity through regularity and grouping assumptions. | 2.6, 5.4 |
 | Temperley 2009 | Metrical structure as part of symbolic music analysis. | 2.6, 5 |
 | Levitin, Grahn, and London 2018 | Meter, pulse, synchronization, and rhythm cognition. | 2.4, 2.6 |
+| Thaut, Trimarchi, and Parsons 2014 | Pattern, meter, and tempo have different computational requirements. | 2.6, 5 |
+| Bouwer et al. 2026 | Rhythm perception and production rely on abstract temporal representations. | 2.6, 5 |
 | Toussaint 2004 | Evenness and onset distribution in cyclic rhythms. | 2.6, 6.4 |
 
 ## Real-Time Interactive System Constraints
@@ -140,7 +147,7 @@ This index summarises parsed literature for the Intelli-Trading Fours dissertati
 | Chapter 2.3 Reactive and Generative Musical Agents | Martin and Torresen 2019; Pachet 2002; Vaggione 1993; Petit and Serrano | Useful for positioning IT4s as closed-loop but not fully generative. |
 | Chapter 2.4 Rhythm, Timing, Entrainment, and Turn-Taking | Levitin et al. 2018; Baird et al. 1993; Hoffman and Weinberg 2011; Scheirer 2000 | Use Levitin et al. as the main rhythm cognition source. |
 | Chapter 2.5 Trading Fours and Turn-Based Musical Dialogue | Donnay et al. 2014; Hodson 2007; Hoffman and Weinberg 2011 | Link trading fours to the state-machine architecture. |
-| Chapter 2.6 Metrical Hierarchy, Salience, and Rhythmic Structure | Longuet-Higgins and Lee 1984; Temperley 2009; Toussaint 2004; Levitin et al. 2018 | Supports anchors, metrical dominance, and skeleton generation. |
+| Chapter 2.6 Metrical Hierarchy, Salience, and Rhythmic Structure | Longuet-Higgins and Lee 1984; Temperley 2009; Toussaint 2004; Levitin et al. 2018; Thaut et al. 2014; Bouwer et al. 2026 | Supports anchors, metrical dominance, abstraction, and skeleton generation. |
 | Chapter 2.7 Evaluation of Interactive Music Systems | Ostermann et al.; Hoffman and Weinberg 2011; Smith 2022; Hu et al. | Use to justify future user evaluation and current diagnostic limits. |
 | Chapter 5 Rhythmic Analysis | Longuet-Higgins and Lee 1984; Temperley 2009; Scheirer 2000; Levitin et al. 2018 | Supports symbolic interpretation and feature extraction. |
 | Chapter 6 Response Planning and Prototype Generation | Pachet 2002; Martin and Torresen 2019; Toussaint 2010; Hu et al.; Gillick et al. 2019 | Use to compare IT4s planning with future richer generation. |
@@ -155,6 +162,8 @@ This index summarises parsed literature for the Intelli-Trading Fours dissertati
 | Real-time musical systems require timing responsiveness. | Levitin et al. 2018; Baird et al. 1993; Hoffman and Weinberg 2011 | strong |
 | Rhythm can be represented computationally as structured onsets over a grid/cycle. | Toussaint 2004; Longuet-Higgins and Lee 1984 | strong |
 | Metrical structure matters for rhythm interpretation. | Longuet-Higgins and Lee 1984; Temperley 2009; Levitin et al. 2018 | strong |
+| Rhythm includes separable pattern, meter, and tempo components. | Thaut et al. 2014; Levitin et al. 2018; Bouwer et al. 2026 | strong |
+| Rhythmic representations can be abstract rather than exact raw timing. | Bouwer et al. 2026; Longuet-Higgins and Lee 1984; Gillick et al. 2019 | strong |
 | IT4s should be distinguished from learning-based predictive systems. | Martin and Torresen 2019; Pachet 2002; Hu et al. | strong |
 | Full response realisation remains future work. | Pachet 2002; Gillick et al. 2019; Hu et al.; Toussaint 2010 | use as comparison, not direct support |
 | Closed-loop state architecture is a valid CS contribution. | Petit and Serrano - Skini; Herrington 2010; Baird et al. 1993 | moderate |
@@ -186,4 +195,3 @@ Use consistent tags in source cards:
 - `#evaluation`
 - `#response-planning`
 - `#response-generation`
-

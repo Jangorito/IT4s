@@ -7,8 +7,8 @@ Use this file to record when PDFs are parsed and when indexes are updated.
 | 2026-04-20 | All PDFs in `Literature/ToReview` | Initial batch parse using local `pypdf` install | 24 source cards and updated `literature_index.md` | 23 PDFs yielded usable text; Rowe 1991 appears scanned/image-only. |
 | 2026-04-20 | Rowe 1991 - Machine listening and composing | Attempted text extraction | [source card](source_cards/rowe_1991_machine_listening_composing.md) | Parsing quality poor; needs OCR, text-based PDF, or manual notes before precise claims are made. |
 | 2026-04-20 | Ostermann et al.; Hu et al.; Petit and Serrano papers | Parsed, but bibliographic metadata incomplete | Source cards created | Add BibTeX entries later to confirm exact year and venue. |
+| 2026-04-21 | Bouwer et al. 2026; Thaut, Trimarchi, and Parsons 2014 | Parsed new PDFs from `Report Writing/Literature/ToReview` | [Bouwer card](source_cards/bouwer_2026_abstract_rhythm_representations.md), [Thaut card](source_cards/thaut_2014_rhythm_perception_neural_substrates.md), updated index and BibTeX | Both parse cleanly; useful mainly for Chapter 2.6 and later rhythm-analysis chapters. |
 
 ## Tooling Notes
 
 `pypdf` was installed locally into `Literature/.tools/` because no system PDF parser was available. The directory is ignored by Git in `.gitignore`.
-
