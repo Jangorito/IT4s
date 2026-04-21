@@ -1,0 +1,407 @@
+Intelli-Trading Fours: Final Report
+Abstract
+**************************************
+Introduction
+1.1 Motivation
+The motivation for Intelli-Trading Fours (IT4s) takes inspiration from the improvisational practice in Jazz known as “trading-fours”: when musicians alternate short improvised phrases in a conversational manner. This format enforces a cycle in which listening, interpretation and response are all derivative of each other, introducing an element of conversation to musical expression.
+
+This interaction model demands close collaboration and near-instant responsive creativity as performers. The success of this model is predicated on the performer’s mutual ability to contextually interpret incoming musical material and generate a musically coherent reply within a constrained time window. Interdisciplinary research suggests that interactive improvisation engages distinct cognitive and neural processes, affirming this project’s emphasis on mutual responsiveness and temporal alignment in music dialogue (Donnay et al., 2014).
+
+From a computational perspective, IT4s provides a framework for human-AI interaction that is both practical and structured. Performances are segmented into explicit turns comprising input capture, analysis, decision-making, and response generation. This allows the system to distinguish and interpret each phase through specialised, extensible subsystems. This separation also reduces the ambiguity associated with continuous co-improvisation (Assayag, Bloch and Cont, 2006), instead providing a closed-loop interaction architecture where the system repeatedly listens, processes, responds and re-enters a waiting state.
+
+
+This model forms the foundation of the system design: the implementation formalises interaction as a sequence of alternating human and AI turns, positioning the system as an interpretable collaborator operating in real time rather than as a passive offline generator. Rather than treating generation as an isolated musical artefact, IT4s situates each response within a repeated temporal exchange, reflecting accounts of computer music that emphasise musical structure as emerging across interacting temporal levels (Vaggione, 1993) and interactive systems that foreground performer-conditioned response (Pachet, 2002; Pasquier et al., 2016).
+
+This work therefore investigates not only how an AI system can generate rhythmic material, but more pertinently, how it can meaningfully participate within a structured, time-sensitive interaction loop that mirrors human musical dialogue.
+
+
+Figure 1.1: Trading-fours-inspired interaction cycle used by Intelli-Trading Fours. The system alternates between listening to a human rhythmic turn, analysing and planning a response, playing an AI response, and returning to a ready state for the next exchange.
+
+1.2 Research Problem
+Designing an interactive musical system capable of participating in real-time rhythmic improvisation presents a multi-stage technical challenge. Real-time systems must sustain a state of temporal coupling with performer input. Unlike offline or non-interactive generative approaches, these systems must: capture live musical events, derive an interpretable representation from them, generate response decisions, produce the audible output before returning to a ready state quickly enough for the exchange to remain musically coherent.
+
+A central difficulty is that raw performance input is not immediately suitable for musical reasoning. Hit events or audio signals must be transformed into a symbolic representation that preserves timing, intensity, and phrase boundaries while remaining tractable for computation. Prior work in rhythm perception and computational music analysis shows that rhythmic interpretation is not simply a matter of counting events; meter, grouping, timing, and salience all shape how rhythmic material is understood (Longuet-Higgins and Lee, 1984; Temperley, 2009; Levitin et al., 2018).
+
+Raw performance is not immediately suitable for musical reasoning within an HCI interaction like it might be between two human performers; this forms a central difficulty for the system. Hit events or audio signals need transforming into a symbolic representation that preserves musical properties such as timing, intensity, and phrase boundaries whilst remaining tractable for computation. Research into both computational music analysis and rhythm perception show rhythmic interpretation to more than a binary matter of counting events, properties such timing, salience, meter and grouping all contribute to the way rhythmic material is construed (Longuet-Higgins and Lee, 1984; Temperley, 2009; Levitin et al., 2018).
+
+The aforementioned representation must subsequently inform response decisions. In the case of Intelli-Trading Fours, this necessitates an interpretable planning stage where response behaviour is variably influenced by analysed features in a controllable manner. Within this approach lies emphasis on ensuring the relationship between human input and system response observable and musically justifiable; thus distinguishing this approach from others that solely prioritise autonomous or opaque generation when considering the production of rhythmic material (Pachet, 2002; Pasquier et al., 2016; Smith, 2022).
+
+Finally, this interaction must be sustained across repeated cycles. After musically responding, the system needs to be poised for the next human turn without accumulating stale state or losing synchronisation. Therefore positioning this project as a response to the following problem:
+
+How can a closed-loop, real-time system capture and represent human rhythmic input, analyse it, plan an interpretable response, realise an audible output, and sustain this process across repeated turn-taking cycles?
+
+Intelli-Trading Fours addresses this problem through the implementation of a closed-loop rhythmic interaction pipeline spanning Bela input capture across OSC with Unity-based turn orchestration, symbolic rhythmic analysis, response planning, interim response realisation, ChucK/Chunity playback, and loop closure.
+
+Figure 1.2: System Pipeline Overview:
+Human Input → Audio Capture (Bela)
+            → Onset Detection / Rhythm Analysis
+            → Symbolic Representation
+            → Response Planning
+            → ChucK Playback
+            → System Reset (Loop) 
+1.3 Aims and Research Questions
+The aim of this project is to design, implement, and evaluate a closed-loop prototype for turn-based human-AI rhythmic interaction. Intelli-Trading Fours focuses on the real-time capture of human rhythmic input, its conversion into a symbolic representation, the extraction of interpretable rhythmic features, response planning, audible playback, and loop closure across repeated interaction cycles. The project does not aim to deliver a fully completed autonomous drumming agent; rather, it investigates the technical architecture required for a system to participate meaningfully in a structured rhythmic exchange.
+
+To support this aim, the project has the following objectives:
+To implement a real-time input pipeline capable of capturing human rhythmic performance through embedded hardware and OSC communication.
+To transform captured hit events into a symbolic rhythmic representation suitable for analysis, planning, and playback.
+To design rhythmic analysis modules that extract musically relevant features such as density, energy, salient anchors, end activity, and segment-level activity profiles.
+To implement an interpretable response-planning stage in which analysed rhythmic features influence response behaviour in a controllable and observable manner.
+To integrate interim response realisation and ChucK/Chunity playback within a closed-loop turn-taking architecture that can return to a ready state after an AI response.
+To evaluate the implemented system through tests, diagnostic tools, and Unity runtime observability, while identifying the limitations of the current response-generation layer.
+
+The dissertation is therefore guided by the following research questions:
+
+RQ1: How can a real-time system structure repeated turn-based rhythmic interaction between a human drummer and an AI agent?
+RQ2: How can human rhythmic input be represented and analysed in a form suitable for response planning?
+RQ3: How can interpretable planning connect analysed rhythmic features to musically justifiable response behaviour?
+RQ4: What are the technical limitations of closing the interaction loop using an interim transformation-based response layer?
+
+These questions reflect the implemented scope of Intelli-Trading Fours. They focus the dissertation on real-time interaction architecture, rhythmic representation, analysis, planning, and loop closure, while leaving the completion of a richer generative response-realisation pipeline as a defined area for future work.
+1.4 Implemented Scope and Deferred Scope
+Intelli-Trading Fours is implemented as a closed-loop prototype for turn-based human-AI rhythmic interaction. The completed system architecture supports the full interaction cycle required for trading-fours-style exchange: human input is captured, compiled into a symbolic rhythmic representation, analysed, used to inform response planning, transformed into an audible AI response, played back, and then returned to a ready state for the next human turn. This establishes the project as an interactive real-time system rather than a collection of disconnected generation components.
+
+Intelli-Trading fours is implemented as a closed-loop prototype for turn-based human-AI rhythmic interaction whose system architecture supports its titular full interaction cycle. The exchange required for a Trading Fours style cycle implemented: human input capture, symbolic rhythmic representation compilation, analysis that informs response planning, audible AI response played back and finally a return to a state ready for human input capture again. This establishes the project as an interactive real-time system rather than a collection of disconnected generation components.
+
+There is a core infrastructure necessary to support this interaction loop. This includes embedded input capture from percussion hardware, OSC-based event communication, Unity-side hit buffering, turn-window capture, quantisation into PatternTurn, rhythmic feature analysis, response planning, ChucK/Chunity playback, runtime debugging tools, and automated tests for key orchestration and analysis behaviours. These components form the technical foundation of the system and are the primary focus of the dissertation.
+
+The response-generation pipeline is deliberately limited in scope. Whilst the system implements an interpretable response-planning layer and a prototype structural generation layer with planning logic and skeleton-oriented response design, the final response realisation stage, in which planned intent and structural skeletons are interpreted and converted into a fully developed rhythmic response, remains incomplete. In the current implementation, audible AI responses are produced using an interim transformation-based mechanism. This allows the interaction loop to be closed and evaluated architecturally, while leaving richer generative response realisation as a defined area for future work.
+
+This distinction is central to this report. The project should not be understood as a finished autonomous AI drummer. Instead, it should be understood as a closed-loop rhythmic interaction prototype whose main contribution lies in the architecture, representation, analysis, planning, playback integration and observability required to support repeated human-AI rhythmic exchange. The partial state of the final generation layer is treated as an implementation limitation and future development path, rather than as a central measure of the system’s success.
+
+A scope summary is shown in Table 1.1.
+
+Area
+Status
+Dissertation Treatment
+Skeleton-oriented structural generation
+Prototype
+Prototype architecture
+Audible response generation
+Interim implementation
+Limitation-aware implementation
+Turn-taking orchestration
+Implemented
+Core system architecture
+Bela/OSC input capture
+Implemented
+Implementation chapter
+Hit buffering and turn capture
+Implemented
+Implementation chapter
+Quantisation into PatternTurn
+Implemented
+Implementation chapter
+Rhythmic analysis modules
+Implemented
+Core technical contribution
+Response planning
+Implemented
+Core technical contribution
+ChucK/Chunity playback
+Implemented
+Implementation chapter
+Loop closure after playback
+Implemented
+Closed-loop architecture contribution
+Debugging and observability tools
+Implemented
+Evaluation/supporting infrastructure
+Automated tests and diagnostics
+Implemented
+Evaluation evidence
+User evaluation with drummers
+Deferred
+Evaluation limitation / future work
+Full response realisation from plan/skeleton
+Deferred
+Future work
+Long-term musical memory
+Deferred
+Future work
+
+
+
+Table 1.1: Implemented, interim, prototype, and deferred scope of Intelli-Trading Fours.
+
+1.5 Contributions
+This project makes a set of technical contributions towards the design and implementation of a closed-loop human-AI rhythmic interaction system. The primary contribution is not a fully autonomous generative drummer, but an implemented architecture that supports repeated turn-based rhythmic exchange between a human performer and an AI system. The system demonstrates how real-time input capture, symbolic representation, rhythmic analysis, response planning, playback and loop closure can be integrated into a coherent and interactive pipeline.
+1.5.1 The implementation of a closed-loop, turn-taking state machine for rhythmic interaction. 
+Here the trading-fours-inspired exchange is formalised as a sequence of explicit phases:
+waiting for human input
+capturing a human turn
+compiling the captured material
+generating an AI response
+playing the response
+returning to a ready state for the next interaction cycle.
+This provides a clear orchestration model for repeated human-AI rhythmic dialogue.
+1.5.2 A real-time input capture and representation pipeline. 
+Human percussion input is captured through embedded hardware and transmitted using OSC before being buffered and organised into time bounded turn windows. These captured events are then compiled into PatternTurn, IT4s’ symbolic rhythmic representation that preserves timing, velocity, quantised step information, and turn boundaries. This representation acts as the central data structure connecting capture, analysis, planning, generation, and playback.
+1.5.3 An interpretable rhythmic analysis pipeline
+The system extracts musical features such as density, energy, salient anchors, end activity, and segment-level activity profiles. These modules musically describe the human input and support response planning without relying on opaque, end-to-end generation.
+1.5.4 A response-planning model 
+The model maps analysed rhythmic features onto explicit response intentions through response types and plan parameters that enable the system to represent behaviours such as mirroring, complementing, simplifying, intensifying, contrasting, and filling. This planning layer makes the relationship between human input and system response more observable and controllable.
+
+
+1.5.5 Prototype skeleton-generation architecture
+This layer explores how metrical dominance, source-pattern relationships, density targets, anchor preservation, and ending behaviour can inform the selection of response structure. While this does not yet constitute a complete final response-realisation pipeline, it provides a technically developed foundation for future generative work.
+
+1.5.6 ChucK/Chunity playback within the interaction loop. 
+Symbolic rhythmic responses are passed to a playback bridge that schedules audible output, allowing the system to complete a full interaction cycle. The loop-closure mechanism then returns the system to a waiting state after the AI response, supporting repeated turn-based exchanges.
+
+1.5.7 Runtime observability and testing infrastructure
+Debug panels and renderers expose turn-loop state, compiled patterns, analysis results, response plans and skeleton-generation outputs. Edit-mode tests and diagnostic tools provide evidence for the behaviour of key subsystems such as analysis, planning, capture flow, skeleton generation, AI response preparation and loop closure.
+
+A summary of the main contributions is shown in Table 1.2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Contribution
+Implemented Evidence
+Dissertation Role
+Closed-loop turn-taking state machine
+TurnLoopController, TurnPhase, loop closure logic
+Core architecture contribution
+Bela/OSC capture pipeline
+Bela input, OSC hit messages, OscHitReceiver, HitBuffer
+Real-time input implementation
+Symbolic rhythmic representation
+TurnWindow, PatternCompiler, PatternTurn
+Representation and analysis foundation
+Rhythmic analysis modules
+Density, energy, anchor, end activity, segment activity/profile analysis
+Core technical contribution
+Response-planning model
+ResponsePlanner, ResponsePlan, response types and parameters
+Interpretable decision-making contribution
+Prototype skeleton generation
+SkeletonBuilder and related map builders
+Prototype generation architecture
+Playback integration
+IT4ChuckTurnPlayer, ChucK/Chunity playback script
+Audio output and interaction completion
+Runtime observability
+Debug presenters and visualisation panels
+Development and evaluation support
+Tests and diagnostics
+Edit-mode tests, batch diagnostics, tuning reports
+Evaluation evidence
+
+Background & Related Work
+2.1 Musical Metacreation and Machine Musicianship
+Musical metacreation as a term provides the broad research context describing systems that use computation to participate in musical tasks such as composition, performance, improvisation and accompaniment. However, machine creativity within this field is not conceptualised in a single way. Some systems position creativity as the autonomous production of musical artefacts, while others understand it as an interactive process shaped by human input, shared agency and real-time response. 
+
+This section reviews the literature across three conceptual axes: autonomous generation versus co-creative interaction, machine output versus human-machine process and independent musical authorship versus responsive machine musicianship. This framing is important because Intelli-Trading Fours is not intended to demonstrate autonomous composition, but to explore how a computational agent can participate in a closed-loop, turn-based rhythmic exchange with a human performer.
+
+2.1.1 Musical Metacreation As A Field
+Musical metacreation, often abbreviated as MuMe, describes computational systems that take on creative musical tasks. Research positions the field broadly, encompassing systems for composition, improvisation, performance, accompaniment and interpretation. This breadth is useful for situating Intelli-Trading Fours but also requires a more precise classification of the project’s contribution. Rather than treating all AI music systems as equivalent, the following discussion distinguishes between systems that generate musical material independently and systems whose creative behaviour is contingent on live human interaction (Pasquier et al. 2016).
+
+For IT4s, the usefulness of MuMe is not that it legitimises any computational music system as “creative”, but that it provides a vocabulary for locating different forms of machine musical agency. The project sits inside this field because it delegates parts of musical interaction to software: listening, representation, analysis, planning and playback. However, its contribution is narrower than autonomous musical authorship. The system’s musical behaviour depends on a human rhythmic turn and is therefore better understood as interactive machine musicianship.
+2.1.2 Autonomous Generative Agents
+One strand of musical metacreation frames machine creativity primarily through autonomous generation. In such systems, musical material is produced by the computational agent according to learned models, internal rules or agent based interaction with other software entities. Eigenfeldt’s Musebots provide a useful example of this approach: they demonstrate musical collaboration between autonomous agents; however, their creative agency remains largely within the computational system rather than being negotiated in an exchange with a live performer (Eigenfeldt,  2013). This model is valuable for understanding machine autonomy, but it differs from the interactional problem addressed by Intelli-Trading Fours. While IT4s contains a machine response stage, its response is not generated in isolation or through interaction with other software agents. It is instead predicated on a bounded human turn that is compiled into PatternTurn, analysed, planned, transformed, played back and then returned to wait for the human turn to trigger its pipeline again. 
+
+2.1.3 Interactive And Co-Creative Machine Musicianship
+A contrasting strand of machine musicianship places creativity not solely in autonomous generation, but within the interaction between a computational system and a human performer. In this model, the machine’s musical behaviour is informed by what the performer has just played such that the system’s subsequent contribution is understood as a response, continuation, transformation or accompaniment rather than as an isolated artefact. This distinction is important for positioning Intelli-Trading Fours because the system does not attempt to compose independently. Its response is conditional on a captured human rhythmic turn, making interaction structure central to its musical role.
+
+Pachet’s Continuator is a significant example of this performer-conditioned approach. The system learns from a musician’s input and generates stylistically related continuations in real time, bridging autonomous generation with interactive musical performance (Pachet, 2002). Its relevance lies less in its specific modelling method, instead framing machine musicianship as contextually responsive participation. The Continuator demonstrates that a computational system can derive musical material from a performer’s contribution and return output that is meaningful within an ongoing exchange. However, Intelli-Trading Fours takes a different design route. Rather than pursuing style-learning continuation, it uses explicit turn segmentation, quantised rhythmic representation, interpretable analysis and response planning and playback loop closure. This makes the system more limited as a generative model, but more transparent and interpretable as an interaction architecture.
+
+Smith’s discussion of human-AI partnerships in generative music further supports this framing by shifting attention from machine output alone toward agency, control, and the performer’s experience of collaboration (Smith, 2022). From this perspective, an interactive music system is not only evaluated by whether its generated material is musically convincing in isolation but also by how its behaviour affects the unfolding creative process. For Intelli-Trading Fours, this means that the system’s musical agency is deliberately scoped and structured: the human performer provides the rhythmic prompt, the system analyses that turn through explicit features, and the AI response is produced through an interpretable planning process. The result is not a fully autonomous improviser but the closed-loop, turn-based interaction prototype prioritises collaboration in which machine musicianship is expressed and evaluated through listening, planning, responding and re-entering the exchange.2.1.4 Product-Centred Versus Process-Centred Creativity
+
+The distinction between autonomous and interactive systems also affects how creativity should be evaluated. Product-centred approaches focus on the quality of the generated musical artefact, which is appropriate for systems that produce self-contained compositions. However, interactive music systems require a more process-centred view. Their creative value cannot be judged only by the standalone quality of generated material, because it also depends on how the system participates in the unfolding exchange with a performer. Smith’s account of human-AI musical partnerships frames agency, control and collaboration as interactional concerns, while Ostermann et al.’s evaluation of reactive jazz accompaniment demonstrates that perceived creativity and musical usefulness are assessed through the user’s experience of real-time system behaviour rather than through output alone (Smith, 2022; Ostermann et al., [year]). The result is not a fully autonomous improviser, but a closed-loop, turn-based interaction prototype in which machine musicianship is expressed through listening, planning, responding and re-entering the exchange.
+2.1.4 Product-Centred Versus Process-Centred Creativity
+
+The distinction between autonomous and interactive systems also affects how creativity should be evaluated. Product-centred approaches focus on the quality of the generated musical artefact, which is appropriate for systems that produce self-contained compositions or standalone musical outputs. However, interactive music systems require a more process-centred view. Their creative value cannot be judged only by the standalone quality of generated material, because it also depends on how the system participates in the unfolding exchange with a performer.
+
+Smith’s account of human-AI musical partnerships frames agency, control and collaboration as interactional concerns, while Ostermann et al.’s evaluation of reactive jazz accompaniment demonstrates that perceived creativity and musical usefulness can be assessed through the user’s experience of real-time system behaviour rather than through output alone (Smith, 2022; Ostermann et al., [year]). This is particularly relevant to Intelli-Trading Fours, where the central contribution lies not in claiming a finished autonomous generative model, but in structuring a closed-loop process of capture, analysis, response planning, playback and re-entry.
+
+
+
+
+
+
+
+
+2.2 Human-AI Improvisation and Co-Creative Systems
+Having positioned Intelli-Trading Fours as a form of interactive machine musicianship, this section considers what makes human-AI musical interaction meaningful in practice. In improvisational contexts, the system’s value does not depend only on the material it generates, but on how it listens, responds, shares agency, and sustains the performer’s sense of an unfolding musical exchange. This is particularly important for Intelli-Trading Fours, where the contribution lies not in autonomous composition, but within an architecture deliberately structured to feature a repeated cycle of human input, machine interpretation, planned response and return to the performer.
+2.2.1 Improvisation As Perception And Response
+A central problem in human-AI improvisation is that the system must treat performer input as musical context rather than as arbitrary data. Thom’s work on real-time interactive improvisation is useful here because it frames improvisational companionship as a time-sensitive problem of perception and response, where the system must interpret live musical material quickly enough to produce an appropriate continuation or accompaniment (Thom, 2000). Similarly, Pachet’s Continuator demonstrates how performer input can become the basis for real-time musical continuation, showing that machine-generated material can function as part of a live exchange rather than as a detached composition (Pachet, 2002). Together, these systems frame improvisation as a perception-response loop in which listening and generation are mutually dependent rather than separate stages.
+
+
+
+Intelli-Trading Fours adopts this perception-response principle, but narrows it to a turn-based rhythmic setting. The human performer’s contribution is captured as a bounded turn, compiled into a symbolic rhythmic representation, analysed through explicit musical features and used to inform a response plan. This differs from systems that attempt continuous accompaniment or stylistic continuation across an open-ended performance. By using explicit turns, IT4s reduces some of the ambiguity of simultaneous improvisation and gives the system defined phases for listening, interpreting, responding and re-entering the exchange. The specific musical basis for this turn-taking model is developed further in Section 2.5.
+2.2.2 Timing, Anticipation And Responsiveness
+Responsiveness is also a temporal and perceptual issue. Hoffman and Weinberg’s work on Shimon is useful as it reveals evaluative metrics beyond literal note production, when judging interactive musical systems, timing, anticipation, synchronisation and perceived response accuracy are also considered (Hoffman and Weinberg, 2011). Although Shimon is an embodied robotic system and Intelli-Trading Fours is a turn-based rhythmic prototype, both systems raise the same broader issue: a musical response must situate itself contextually within the performer’s experience of the interaction. In IT4s, this concern is addressed through capture windows, quantisation, playback scheduling and loop closure. The system does not yet implement full mutual entrainment but sustains timing as an explicit architectural concern.
+2.2.3 Agency And Control In Co-Creative Systems
+Human-AI improvisation also raises questions of agency and control. Smith’s account of human-AI partnerships in generative music is useful because it treats collaboration as something shaped by system design, not simply by the presence of an AI model (Smith, 2022). In this view, agency is distributed through the roles assigned to the performer and the system. This is pertinent to Intelli-Trading Fours because it gives the human performer control over the source rhythmic material while giving the system agency over analysis, response planning and playback. The system’s agency is therefore deliberately constrained: it cannot act as a fully independent improviser, but as a responsive participant within a structured exchange.
+2.2.4 Implications For Intelli-Trading Fours
+Taken together, this literature suggests that human-AI improvisation should be understood as an interaction loop rather than a one-way generation task. A co-creative system must be able to perceive relevant musical information, respond in accordance with an appropriate temporal structure and exhibit behaviour meaningful to the performer. Intelli-Trading Fours addresses these requirements through a closed-loop turn-taking architecture: the performer plays, the system captures and analyses the turn, a response is planned and played back, and the system returns to a state where the next human turn can begin. This provides the interactional basis for the more specific discussion of reactive and generative musical agents in the following section.
+
+2.3 Reactive, Predictive and Generative Musical Agents
+The previous section established human-AI improvisation as an interaction loop in which perception, timing and agency shape the musical exchange. This raises a further question: what kind of musical agent is Intelli-Trading Fours? Interactive music systems can be positioned along a spectrum from reactive systems, which respond directly to current input; to predictive systems, which model likely future behaviour; and generative systems, which produce more independent or stylistically developed musical material. This distinction is important because IT4s should not be presented as a fully generative improviser. Its implemented contribution is better understood as a reactive and planning-led architecture with prototype structural generation.
+2.3.1 Reactive Musical Interaction
+
+Reactive musical systems respond to performer input, environmental events or changing musical state. In this context, “reactive” should not be understood as musically simplistic. A reactive system can still contain structured decision-making, constraints and planned behaviour; the key point is that its output is conditioned by an external input - current or previous - rather than by an independent long-term compositional process. Petit and Serrano’s work on reactive programming for interactive structured music is helpful here for presenting how musical systems can combine deterministic structure with live or nondeterministic interaction through explicit states, events and patterns (Petit and Serrano, [year]). This supports the view that real-time musical responsiveness often depends on architecture as much as on generation.
+
+Intelli-Trading Fours follows this reactive principle through its implemented turn-based loop. The system waits for a human performance, captures a bounded rhythmic turn, compiles it into a symbolic representation, analyses it, plans a response and plays that response back. This means the AI output is not generated in isolation: it is triggered and shaped by the performer’s preceding turn. However, rather than existing as a direct input-output mapper, IT4s response is mediated by interpretable musical analysis features and an explicit response-planning stage, allowing the system’s behaviour to be inspected, rhythmically reasoned about whilst accommodating for any future evolutions in sophistication.
+2.3.2 Predictive Interactive Systems
+Predictive musical systems extend this idea by modelling likely future behaviour. Martin and Torresen’s Interactive Musical Prediction System, for example, uses mixture density recurrent neural networks to predict future user control data in real time (Martin and Torresen, 2019). This represents a different design strategy from IT4s. Rather than converting performer input into symbolic rhythmic features and response plans, predictive systems use learned models to anticipate or complete aspects of future interaction. Such systems can support powerful forms of musical assistance and co-performance but they also introduce different trade-offs around training data, opacity, evaluation and control.
+
+This contrast helps clarify IT4s’ scope. The system does not attempt to predict the drummer’s next turn and currently possesses no long-term behavioural modelling of the performer. Its analysis is turn-local and its response planning is based on explicit rhythmic features rather than learned prediction. Whilst a limitation in terms of adaptive depth, it is also a deliberate design advantage for the dissertation: the system’s decisions can be traced through capture, representation, analysis and planning. Predictive modelling therefore provides a useful future direction, but it is not the implemented method.
+2.3.3 Generative Response And Drum-Performance Models
+Generative musical agents place greater emphasis on producing new musical material. Pachet’s Continuator remains relevant here because it combines interaction with stylistically informed continuation, showing how performer input can condition richer generated output (Pachet, 2002). More recent learning-based work also frames musical response generation as a data-driven problem. Hu et al., for example, approach call-and-response as automatic composition using a knowledge-enhanced model, while Gillick et al. demonstrate learned drum-performance generation and humanisation through sequence transformation (Hu et al., [year]; Gillick et al., 2019). These systems are useful comparison points because they demonstrate response generation beyond simple transformation or rule-based planning.
+Although there are shared sentiments, these approaches also highlight what IT4s does not yet claim. The current implementation does not include a complete learned response generator, deep motif transformation model or expressive humanisation layer. Whilst IT4s ascertainment and separation of response intent from response realisation share sentiment with the concept of explicit stylistic continuation, it does not share its Machine Learning basis. The implemented system produces an interpretable response plan based on analytical features, includes prototype structural generation through the skeleton-building architecture, and uses an interim transformation layer to produce audible output. This distinction should be maintained throughout the dissertation: IT4s is generative in aspiration and partially generative in structure, but its completed contribution is the closed-loop reactive architecture as well as its analytical and planning process.
+
+2.3.4 Positioning Intelli-Trading Fours
+The distinction between reactive, predictive and generative agents is therefore not a hierarchy in which reactive systems are automatically weaker. Vaggione’s critique of simple deterministic-versus-random framings is useful here because it suggests that musical structure can emerge through constraints operating across different temporal levels rather than through unconstrained generation alone (Vaggione, 1993). For IT4s, explicit constraints are not merely technical limitations; they are what make the interaction intelligible. Bounded turns, symbolic representation, feature analysis and response planning provide a controlled structure within which machine response can occur.
+
+Intelli-Trading Fours is best classified as a reactive, planning-led, turn-based musical agent with prototype generative components. It reacts to the most recent human turn, analyses that turn through interpretable rhythmic features, constructs a response plan and closes the interaction loop through playback and return to waiting. Compared with predictive or fully generative systems, this approach prioritises transparency, real-time control and architectural completeness. This positioning is important for the dissertation because the project’s contribution remains defensible: IT4s does not prove autonomous musical creativity but demonstrates how a computational agent can structure responsive rhythmic interaction through explicit and interpretable analysis, planning and loop closure.
+
+
+
+
+
+
+
+
+
+
+
+
+2.4 Rhythm, Timing, Entrainment, and Turn-Taking
+The previous sections positioned Intelli-Trading Fours as a reactive, planning-led musical agent. However, because the project is centred on drumming, the interaction problem is specifically rhythmic. Rhythm is not simply musical content that can be generated after the fact; it is a temporal medium through which performers coordinate action, perceive structure and experience responsiveness [back with ref?]. For IT4s, this makes timing a central design concern. The system must capture when a performer plays, represent those events in a form that can be analysed, plan a response, and play that response back within a musically meaningful temporal frame.
+
+2.4.1 Rhythm As A Time-Sensitive Interaction Medium
+Levitin, Grahn and London’s discussion of rhythm, movement and entrainment is useful because it frames rhythm as deeply connected to pulse, timing, synchronisation and bodily coordination (Levitin, Grahn and London, 2018). In musical interaction, rhythmic information is not experienced solely as an abstract pattern; it is felt through the timing of events with respect to the performer’s expectation of when future events should occur. This is especially important in percussion-based interaction, where pitch and harmony do not contribute to its evaluation as much as onset timing, density, accent and dynamic energy.
+
+For Intelli-Trading Fours, this requires positioning rhythm as both data and interaction. The system does not merely need to detect that a drum hit happened; it needs to know where that hit occurred within a temporal frame. This motivates the project’s emphasis on timestamped hit capture, bounded capture windows, quantised step grids and playback scheduling. Timing is therefore not a secondary implementation detail, but an essential part of the musical material that the system must prioritise.
+
+
+FROM HERE:
+2.4.2 Machine Listening And Rhythmic Feature Extraction
+Interactive rhythmic systems also require a form of machine listening. Scheirer’s work on music-listening systems becomes relevant here because its framing of computational listening as the extraction of musically meaningful information from sound. Information such as tempo, segmentation and perceptual orientation (Scheirer, 2000). Although IT4s does not attempt full audio-scene understanding, it still faces a related problem: live performance events must be transformed into features that a computational agent can use for response planning.
+
+This transformation is deliberately constrained in IT4s. Rather than analysing raw audio directly inside Unity, the system receives Bela-derived hit events over OSC, stores them in a hit buffer, captures a bounded turn and compiles that turn into a symbolic rhythmic representation. This exposes later analysis stages to explicit rhythmic features such as density, velocity energy, end activity and segment profile. In this sense, IT4s uses a pragmatic machine-listening pipeline: physical onset detection is separated from symbolic representation and higher-level musical interpretation.
+
+2.4.3 Quantisation, Expressive Timing and Symbolic Representation
+
+A key challenge in rhythmic interaction is that performed timing is rarely perfectly aligned to a grid. Longuet-Higgins and Lee argue that rhythmic interpretation involves resolving ambiguity through assumptions about regularity, meter and grouping (Longuet-Higgins and Lee, 1984). This is relevant to IT4s whose architecture converts temporally messy live input into a representation that is stable enough for analysis and response planning. Quantisation is therefore not just a technical convenience; it is an interpretive act that decides how performed events relate to an underlying rhythmic structure.
+
+At the same time, quantisation introduces a trade-off. A rigid grid can make analysis and generation tractable, but it can also flatten expressive timing. The musical importance of expressive timing in drum patterns is highlighted by Gillick et al.’s work on drum performance with regard to generation and humanisation. In particular, the research emphasises the relationship between a performed groove and an associated abstract rhythmic structure (Gillick et al., 2019). IT4s employs a clear and interpretable symbolic representation for the later planning stages, while retaining timing offset information within the representation of a compiled turn. This positions the system as suitable for analysis of a deterministic nature, while maintaining extensibility in the form of richer expressive timing and humanisation for future work. 
+2.4.4 Entrainment, Responsiveness And Turn-Based Timing
+
+Timing also matters because interactive musical systems are judged through responsiveness. Baird, Blevins and Zahler’s interactive computer performer demonstrates the importance of following, timing adaptation and ensemble responsiveness in computer-based performance systems (Baird, Blevins and Zahler, 1993). Similarly, Hoffman and Weinberg’s work on Shimon shows that synchronisation, anticipation and response accuracy affect the perceived quality of musical interaction (Hoffman and Weinberg, 2011). These systems differ from IT4s but support 
+the broader musical interaction concept that positions the timing and nature of a systems response as viable evaluative metrics the material produced.
+
+IT4s does not fully implement mutual entrainment. The system does not continuously adapt its tempo to a performer across an open-ended improvisation, nor does it model long-term timing drift between human and machine. Instead, it uses a turn-based timing model in which the first valid human hit opens a bounded capture window, the window duration is derived from the configured tempo and bar length, and the captured hits are then compiled into a quantised PatternTurn before analysis, planning and transformation. This means that response generation operates on a metrical step grid rather than directly on an unconstrained stream of raw hit times. However, the representation is not a complete erasure of performed timing: each active grid step can retain a sample-level offset from its quantised position, allowing microtiming information to remain available during playback. This structure reduces some of the ambiguity of simultaneous improvisation while preserving the need for accurate capture, scheduling and response timing.
+2.4.5 Implications For Intelli-Trading Fours
+The literature on rhythm, machine listening and timing supports a central design decision in IT4s: the system separates physical hit capture, symbolic turn representation, rhythmic analysis and audio playback. Bela-derived timestamps and OSC hit messages provide a low-latency, sample-referenced event stream from the physical drum interface. HitBuffer and the turn-capture flow organise those events into bounded human turns. PatternCompiler converts the captured turn into a quantised PatternTurn, which can then be analysed and used for response planning. Finally, ChucK/Chunity playback turns the planned or transformed pattern back into sound.
+
+This separation is important because each stage handles a different form of musical time. Capture preserves the performer’s actions as timestamped events, maintaining a traceable record of when hits occurred in physical performance time. Quantisation then translates those events into a metrical grid that the system can analyse and transform, while still retaining microtiming offsets where available. Analysis abstracts this representation into interpretable rhythmic features, shifting the system from event timing to musical description. Playback then tests whether the generated response can be returned within the expected turn structure and aligned convincingly with the shared pulse. 
+
+IT4s therefore perceives rhythm not only as musical content, but as an architectural coordination problem: the system must preserve, discretise, interpret and reschedule timing information across the interaction loop. The next section builds on this by considering trading fours specifically, where turn-taking is not only a technical convenience but a musical practice that gives the interaction its dialogic form.
+
+2.5 Trading Fours and Turn-Based Musical Dialogue
+
+Trading fours provides a useful musical model for IT4s because it already contains a clear alternation between listening and response. In jazz practice, a performer does not simply produce an isolated phrase; they contribute material that invites a subsequent reply. Donnay et al. use trading fours as a model of interactive improvisation and frame it as a form of musical communication involving collaborative and emergent exchange (Donnay et al., 2014). Hodson's account of jazz interaction similarly supports the idea that improvisation can be understood conversationally, where performers respond to, elaborate or redirect one another's musical ideas (Hodson, 2007). For IT4s, this means that trading fours is not only a stylistic reference. It provides a structured interaction model in which the meaning of a response depends on its relation to the preceding turn.
+
+This is computationally useful because turn-taking gives the system explicit temporal responsibilities. Rather than attempting to listen, analyse, generate and perform simultaneously across an open-ended improvisation, IT4s divides the exchange into defined phases. The implementation reflects this through the TurnPhase state vocabulary: WaitingForHuman, CapturingHuman, CompilingHumanTurn, GeneratingAiResponse and PlayingAiResponse. These phases map the musical alternation of trading fours onto a state-machine architecture. The human performer has a bounded space in which to offer material; the system then has a bounded space in which to interpret and answer; loop closure returns control to the performer for the next exchange.
+
+The important point is that this structure is not merely a simplification of real improvisation. It gives the system a practical form of musical accountability. Each AI response can be evaluated as an answer to a specific human turn, rather than as an independent generated artefact. This supports the dissertation's wider distinction between autonomous generation and responsive interaction: IT4s does not claim to be a fully open-ended improviser, but it does implement the conditions needed for repeated rhythmic dialogue. The turn boundary makes the source material identifiable, the response process inspectable and the re-entry point testable.
+
+The limitation is that this design reduces the simultaneity of human musical interplay. IT4s does not currently interrupt, overlap with, or continuously negotiate tempo with the performer. Instead, it treats trading fours as a discrete call-and-response structure in which musical dialogue is mediated by state transitions. This trade-off is appropriate for the current prototype because it makes the interaction observable and technically defensible: responsiveness can be discussed in terms of capture accuracy, response timing, phase correctness and loop closure, while richer forms of overlapping improvisation remain future work.
+
+2.6 Metrical Hierarchy, Salience, and Rhythmic Structure
+
+Once a human turn has been represented on a rhythmic grid, the system still needs to decide which parts of that pattern are musically important. Rhythmic structure is not only a matter of counting active steps. Longuet-Higgins and Lee argue that rhythmic interpretation depends on assumptions about meter, regularity and grouping, because the same sequence of events can be heard differently depending on its metrical context (Longuet-Higgins and Lee, 1984). Levitin, Grahn and London similarly emphasise pulse, timing and embodied expectation as central to rhythmic perception (Levitin, Grahn and London, 2018). For IT4s, this supports the use of metrical and structural features rather than treating all detected hits as equivalent.
+
+This idea appears in the analysis layer through anchor detection. The AnchorAnalyser identifies salient steps by combining velocity, local accent, isolation, metrical position and phrase role. A loud hit may be important, but importance can also come from its placement on a strong beat, its role at the beginning or end of a phrase, or its contrast with neighbouring activity. In this sense, an anchor is not simply the loudest event in the turn. It is a heuristic estimate of which rhythmic events are likely to carry structural weight for later response planning.
+
+The SegmentActivityProfileAnalyser provides a complementary view by describing the shape of activity across the turn. By classifying density and energy profiles as flat, increasing, decreasing, front-loaded, back-loaded or middle-weighted, the system can reason about phrase contour rather than only local onsets. This is important for a turn-based response system because a musically plausible answer may need to preserve an opening idea, mirror a closing gesture, contrast a dense region, or fill a sparse ending.
+
+The same reasoning supports the prototype skeleton-generation layer. Toussaint's work shows that rhythmic patterns can be represented computationally as onset and silence structures over a temporal cycle (Toussaint, 2004). IT4s extends this grid-based view with metrical salience and source-derived features. SkeletonMetricMapBuilder assigns different weights to beat-level and subdivision-level positions, while SkeletonBuilder combines metrical strength, source relation, anchor information, density shaping and ending constraints when selecting candidate response steps. The generated skeleton is therefore not a finished musical response in itself, but a structural proposal: it marks where response events could occur in a way that remains connected to the source turn and to the metrical hierarchy.
+
+This matters for the dissertation because it explains why the analysis and generation stages are interpretable. The system does not rely on an opaque model to decide that one onset matters more than another. Instead, it exposes salience as a set of inspectable assumptions about accent, meter, phrase position and activity shape. These assumptions are necessarily simplified, but they provide a defensible bridge between rhythmic perception literature and the implemented response-planning architecture.
+
+2.7 Evaluation of Interactive Music Systems
+
+The preceding sections imply that IT4s cannot be evaluated only by asking whether the final AI rhythm sounds good in isolation. Interactive music systems are experienced as processes: they listen, decide, respond and affect the performer's sense of collaboration. Smith's discussion of human-AI musical partnership supports this process-centred view, because agency and control are shaped by the design of the interaction rather than by generated output alone (Smith, 2022). Ostermann et al.'s evaluation of reactive jazz accompaniment also indicates that perceived creativity and usefulness in interactive music depend on user experience and real-time behaviour, not just on static musical artefacts (Ostermann et al., [year]).
+
+For IT4s, evaluation therefore needs multiple criteria. Timing correctness concerns whether hit capture, turn windows, quantisation and playback scheduling preserve the intended temporal structure. State correctness concerns whether the system moves through the expected phases, handles errors and returns to WaitingForHuman after AI playback when loop closure is enabled. Responsiveness concerns whether the system's answer arrives within the expected turn structure and feels connected to the preceding human contribution. Interpretability concerns whether the analysis results, response plan and skeleton/debug outputs make the system's behaviour explainable. Musical plausibility concerns whether the response is rhythmically coherent, appropriately related to the source turn and convincing as a trading-fours reply.
+
+The current project can evaluate some of these criteria more strongly than others. Automated edit-mode tests can support claims about analysis behaviour, response-planner decisions, skeleton construction, capture flow and loop-closure state transitions. Diagnostic outputs and debug renderers can make internal decisions visible for inspection and tuning. These forms of evaluation are appropriate for a technical prototype because they test whether the architecture behaves as designed. However, they cannot fully establish perceived responsiveness, collaborative feel or musical quality. Those claims require listening tests or performer studies, as suggested by work on call-and-response interaction and reactive jazz accompaniment (Hoffman and Weinberg, 2011; Ostermann et al., [year]).
+
+This gives IT4s a layered evaluation strategy. The dissertation can make strong claims about implemented functionality, timing assumptions, state-machine correctness and interpretability, while treating musical believability and performer experience as partially evaluated and future-facing. This distinction is important: it prevents the project from overclaiming a finished AI drummer, while still recognising that a working interaction architecture can be evaluated on more than the aesthetic quality of its final audio output.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+References
+…
+Assayag, G., Bloch, G. and Cont, A. (2006) ‘SKINI: A reactive programming language for interactive musical systems’, in Proceedings of the International Computer Music Conference (ICMC). New Orleans, USA.
+Vaggione, 1993)
+Pachet, 2002; 
+Pasquier et al., 2016)
+Longuet-Higgins and Lee, 1984; 
+Temperley, 2009; 
+Levitin et al., 2018
+Smith, 2022
+Eigenfeldt, A. (2013) ‘The evolution of evolutionary software agents in generative music: The Musebots’, in Proceedings of the International Conference on Computational Creativity (ICCC). Sydney, Australia. CHECK YEAR
+Ostermann et al., [year]
+(Thom, 2000)
+(Hoffman and Weinberg, 2011)
+(Petit and Serrano, [year])
+(Martin and Torresen, 2019)
+(Hu et al., [year]; 
+Gillick et al., 2019)
+(Vaggione, 1993)
+(Scheirer, 2000)
+(Longuet-Higgins and Lee, 1984)
+(Baird, Blevins and Zahler, 1993)
