@@ -1,0 +1,7 @@
+Section,GroupField,GroupValue,CaseCount,MeanDensityError,MeanAnchorMismatch,MeanGapMismatch
+Overall,All,All,300,0.0478084,0.577556,0.149312
+ResponseType,ResponseType,Complement,36,0.0793403,0.0833333,0.0703993
+ResponseType,ResponseType,Contrast,22,0.101894,0.310606,0.172181
+ResponseType,ResponseType,Fill,62,0.11045,0.887097,0.103261
+ResponseType,ResponseType,Intensify,118,0.0198341,0.876554,0.204661
+ResponseType,ResponseType,Mirror,62,0.000907377,0.0806452,0.127727

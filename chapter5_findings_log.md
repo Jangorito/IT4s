@@ -218,3 +218,56 @@ This suggests that responsiveness depends on structural and energetic characteri
 - Core evidence for reactivity in Section 5.3
 - Supports interpretability and decision-boundary arguments
 - Connects directly to planner margin analysis
+
+## F4 — Plan vs Output Fidelity
+
+**Task**: Phase 4, Task 5  
+**Sections**: 5.6  
+
+---
+
+### Aggregate results
+- Mean density error: 0.048
+- Mean gap mismatch: 0.149
+- Mean anchor mismatch: 0.578
+
+---
+
+### Interpretation
+- Density is reproduced accurately across response types.
+- Gap/complementarity behaviour is moderately aligned.
+- Anchor preservation behaviour is poorly aligned.
+
+---
+
+### Response-type behaviour
+- Mirror and Complement show strong alignment between plan and output.
+- Intensify and Fill show severe anchor mismatch (~0.87).
+- This indicates that anchor intent is not enforced in generation.
+
+---
+
+### Key insight
+- The system demonstrates correct high-level planning but inconsistent low-level realisation.
+- Planner intent is not reliably translated into output structure.
+
+---
+
+### Safe claims
+- The planner is expressive and interpretable.
+- The generation layer is only partially faithful to planner intent.
+- Some structural constraints (e.g. density) are easier to realise than others (e.g. anchors).
+
+---
+
+### Risks / limitations
+- Anchor behaviour is not enforced in the generator.
+- Complementarity is only loosely controlled.
+- Evaluation is limited to structural metrics, not perceptual quality.
+
+---
+
+### Write-up use
+- Core evidence for Section 5.6 (Limitations)
+- Supports critique of FeatureTransformer / generation layer
+- Provides justification for future ML-based realiser
