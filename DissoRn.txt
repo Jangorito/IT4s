@@ -402,27 +402,43 @@ There are two important prototype trade-offs in this design. First, Unity extrap
 The input architecture also supports development without changing downstream logic. InputModeBootstrap can select live Bela OSC input, a fake OSC rig or a keyboard-based OSC emulator, while OscHitReceiver remains the common receiver path. This means the same HitEvent, HitBuffer and TurnWindow pipeline can be exercised with physical hardware or synthetic input. Figure 3.3 should show this path as: Bela hit detection -> OSC hit payload -> OscHitReceiver -> HitEvent -> HitBuffer -> TurnCaptureController -> TurnWindow, with MusicalTimingConfig feeding HumanTurnCaptureFlow to show that the capture length is derived from the configured phrase.
 
 
+3.4 Symbolic Representation and Quantisation
 
+Once a TurnWindow has been captured, the system needs a representation that later stages can analyse, transform and play back consistently. The raw TurnWindow preserves the physical timing of the performer, but it is not yet convenient for musical reasoning because it is a list of timestamped hits rather than a rhythmic structure. IT4s therefore converts each captured turn into PatternTurn, the symbolic representation shared by analysis, response preparation, transformation, debug rendering and ChucK playback.
 
+The rhythm-representation service PatternCompiler performs this conversion. It receives a TurnWindow and a QuantisationSettings object containing BPM, steps per quarter note and sample rate. These values are derived from the same musical timing configuration used by the turn-capture system, which keeps capture duration and grid resolution internally consistent. PatternCompiler calculates the duration of one grid step in samples, then creates fixed-length velocity and offsetSamples arrays covering the captured window. This produces a regular temporal structure over which later modules can count active steps, compare sections of a turn and schedule playback.
 
+For each HitEvent in the TurnWindow, PatternCompiler calculates the hit's position relative to the window start, rounds that position to the nearest grid step, and records the hit's velocity at that step. It also calculates the difference between the original hit time and the centre of the assigned step. This difference is stored in offsetSamples and clamped to half a step in either direction. The result is therefore not a complete erasure of performance timing. The main representation is quantised, but each active step can still carry a sample-level indication of whether the hit was early or late relative to the grid.
 
+The implementation uses a simple collision rule: if multiple hits map to the same quantised step, the highest velocity is retained. This is appropriate for the current prototype because it keeps PatternTurn compact and deterministic, but it is also a limitation. Closely spaced ornaments, flams or repeated strokes inside the same grid cell are reduced to a single velocity and offset. A richer future representation could store multiple hit events per step, or separate a step's structural onset from additional embellishments. The current design favours interpretability and compatibility with the analysis pipeline over detailed preservation of every intra-step event.
 
+PatternTurn stores both musical and traceability metadata. Its fields include turnId, bpm, stepsPerQuarter, sampleRate, startSamples, endSamples, velocity and offsetSamples. The start and end samples keep the pattern grounded in the original capture window, while the timing fields allow playback and visualisation code to reconstruct the relationship between steps and real time. The velocity array acts as the primary onset and intensity map: a zero value represents no event at that grid step, while a positive value represents an active hit. The offsetSamples array carries the microtiming information needed by playback and debug visualisation.
 
+This representation is a methodological compromise. It makes rhythm tractable for deterministic analysis because density, energy, anchors, segment activity and transformation logic can all operate on the same grid. It also makes the system easier to test, because a PatternTurn can be inspected as arrays and metadata rather than as a stream of asynchronous input events. However, the representation assumes a configured tempo and subdivision rather than inferring tempo from the performer, and most analysis stages currently reason primarily over quantised step activity. IT4s therefore preserves a trace of expressive timing, but it does not yet model groove or timing feel as a higher-level feature.
 
+Figure 3.4 should show the representation change as: TurnWindow -> PatternCompiler + QuantisationSettings -> PatternTurn. The figure should distinguish the raw hit list from the compiled arrays, ideally showing one example hit being mapped to a grid step with both velocity and offsetSamples retained.
 
+3.5 ChucK/Chunity Playback Integration
 
+The playback stage is deliberately narrower than the analysis and representation stages. Its responsibility is to turn a generated PatternTurn back into audible sound at the correct relative times, allowing the interaction loop to complete. IT4s uses ChucK/Chunity for this role so that Unity can remain responsible for orchestration and symbolic processing, while ChucK owns short-term audio scheduling.
 
+The Unity-side bridge is IT4ChuckTurnPlayer. On startup it loads the ChucK script IT4_TurnPlayer.ck from StreamingAssets and polls a ckReady flag before accepting playback requests. This readiness check is important because TurnLoopController should not enter playback if the audio endpoint is unavailable. When PlayTurn is called, IT4ChuckTurnPlayer validates that the PatternTurn is complete, derives samplesPerStep from BPM, steps per quarter and sample rate, and sends the step count, timing values, velocity array and offsetSamples array into ChucK. It then broadcasts the playTurn event.
 
+On the ChucK side, IT4_TurnPlayer.ck receives these global values and builds a list of active events from the velocity and offset arrays. Each active step becomes a scheduled hit time, calculated as the grid position plus its stored microtiming offset. The ChucK script sorts these events by time and advances using sample durations, so playback timing is owned by the audio engine rather than by Unity's frame loop. This preserves the reason for keeping offsetSamples in PatternTurn: playback can reintroduce the early or late placement of hits rather than triggering every event exactly on the quantised grid.
 
+The bridge also supports a metronome option and a stopTurn event. The metronome is useful during development because it makes timing errors easier to hear, while stopTurn allows debug re-arming to interrupt playback cleanly. These are practical integration features rather than musical intelligence, but they make the prototype easier to run, test and diagnose.
 
+The main limitation is that the current ChucK bridge does not report a reliable playback-complete callback to Unity. As described in Section 3.2, TurnLoopController therefore estimates playback duration from the generated PatternTurn and returns to WaitingForHuman after that duration plus a small padding value. This is adequate for demonstrating closed-loop interaction, but it means Unity's loop closure is based on expected duration rather than confirmed audio completion. Future work should replace this with an explicit completion signal from the playback layer.
 
+Figure 3.5 should show Unity passing PatternTurn playback data into IT4ChuckTurnPlayer, ChucK receiving playTurn, and the state machine returning to WaitingForHuman through the timer-based loop-closure path.
 
+3.6 Observability and Implementation Evidence
 
+IT4s includes observability infrastructure so that the prototype can be inspected as an interactive system rather than treated as a black-box audio generator. TurnLoopController publishes events for phase changes, captured turns, compiled human patterns, response plans, skeleton output and generated AI patterns. These events are used by debug components such as TurnLoopDebugPresenter, PatternTurnDebugRenderer, ResponsePlannerDebugRenderer and SkeletonDebugRenderer to expose the system's internal state during runtime.
 
+This matters because many of the project's claims concern process rather than only final audio. A generated rhythm may sound plausible, but the dissertation also needs to show whether the system captured the correct window, compiled it into the expected PatternTurn, produced interpretable planning data and returned to the correct state. The debug layer makes these intermediate artefacts visible, which supports development, diagnosis and later evaluation.
 
-
-
-
+The automated tests serve a related purpose. Edit-mode tests cover capture flow, loop closure, debug re-arming, analysis modules, response planning, skeleton generation and AI response preparation. These tests do not prove that the system is musically convincing to a performer, but they do provide evidence that key architectural behaviours are implemented and inspectable. This distinction is important: Chapter 3 establishes the evidence infrastructure, while the evaluation chapter considers what that evidence can and cannot support.
 
 
 References
@@ -449,3 +465,4 @@ Gillick et al., 2019)
 (Baird, Blevins and Zahler, 1993)
 (Donnay et al., 2014)
 (Hodson, 2007)
+
