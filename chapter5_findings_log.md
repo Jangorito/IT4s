@@ -271,3 +271,60 @@ This suggests that responsiveness depends on structural and energetic characteri
 - Core evidence for Section 5.6 (Limitations)
 - Supports critique of FeatureTransformer / generation layer
 - Provides justification for future ML-based realiser
+
+## F5 — Timing and Real-Time Performance
+
+**Task**: Phase 4, Task 6  
+**Sections**: 5.5  
+
+---
+
+### Aggregate results
+- Mean post-capture latency: 2.59 ms
+- Max latency: 66.3 ms
+- Std deviation: 3.88 ms
+
+---
+
+### Interpretation
+- The system operates within real-time constraints.
+- Average latency is effectively instantaneous.
+- Worst-case latency remains below perceptual thresholds.
+
+---
+
+### Stage breakdown
+- Generation dominates processing time (~2.3 ms)
+- Analysis and planning are negligible (<0.2 ms)
+- Playback triggering is near-instantaneous
+
+---
+
+### Key insight
+- System responsiveness is primarily constrained by the generation layer.
+- The architecture itself introduces minimal latency.
+
+---
+
+### Safe claims
+- The system is capable of real-time interaction
+- Latency is low enough to support responsive musical exchange
+- Performance is stable with occasional acceptable spikes
+
+---
+
+### Risks / limitations
+- Latency measurement excludes human performance duration
+- Occasional spikes may affect perceived responsiveness
+- Timing is evaluated in controlled conditions
+
+---
+
+### Write-up use
+- Core evidence for Section 5.5 (Interaction Quality)
+- Supports real-time system claim
+- Connects to generator performance limitations
+
+This is your key paragraph (use this)
+
+The system demonstrates real-time performance characteristics, with an average post-capture latency of approximately 2.6 ms and a worst-case latency of 66 ms. This indicates that the system is capable of responding effectively within perceptual limits for interactive musical systems. Analysis, planning, and playback triggering contribute negligibly to overall latency, with the majority of processing time concentrated in the generation stage. This suggests that system responsiveness is primarily constrained by the realisation layer rather than the architectural pipeline itself.
