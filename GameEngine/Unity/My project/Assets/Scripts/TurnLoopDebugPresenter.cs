@@ -1,3 +1,6 @@
+using System;
+using System.Collections;
+using System.IO;
 using IT4s.Data;
 using IT4s.Orchestration;
 using IT4s.Rhythm.TurnAnalysis.Models;
@@ -39,6 +42,11 @@ namespace IT4s.Debugging
         [SerializeField] private float maxPanelWidth = 980f;
         [SerializeField] private Vector2 screenPadding = new Vector2(16f, 16f);
 
+        [Header("Export")]
+        [SerializeField] private KeyCode exportHumanPanelKey = KeyCode.P;
+        [SerializeField, Min(1)] private int exportSuperSize = 4;
+        [SerializeField] private string exportFolderName = "DiagnosticsOutput/DebugPanelExports";
+
         private TurnWindow lastTurnWindow;
         private bool hasLastTurnWindow;
         private PatternTurn lastHumanPattern;
@@ -46,6 +54,7 @@ namespace IT4s.Debugging
         private TurnAnalysisResult lastAnalysisResult;
         private string lastAnalysisSummary = string.Empty;
         private TurnPhase currentPhase = TurnPhase.Transition;
+        private bool exportInProgress;
 
         private GUIStyle headingStyle;
         private GUIStyle bodyStyle;
@@ -78,6 +87,16 @@ namespace IT4s.Debugging
         private void OnDisable()
         {
             Unsubscribe();
+        }
+
+        private void Update()
+        {
+            if (exportInProgress || !UnityEngine.Input.GetKeyDown(exportHumanPanelKey))
+            {
+                return;
+            }
+
+            TryBeginHumanPatternExport();
         }
 
         public void OnHumanTurnCaptured(TurnWindow window)
@@ -279,6 +298,88 @@ namespace IT4s.Debugging
             renderer.Draw(rect);
         }
 
+        private void TryBeginHumanPatternExport()
+        {
+            PatternTurn pattern = humanPatternRenderer != null ? humanPatternRenderer.Pattern : lastHumanPattern;
+            if (pattern == null)
+            {
+                Debug.LogWarning("TurnLoopDebugPresenter could not export the human pattern panel because no compiled pattern is available yet.");
+                return;
+            }
+
+            if (!showDebugUi)
+            {
+                Debug.LogWarning("TurnLoopDebugPresenter could not export the human pattern panel because the debug UI is hidden.");
+                return;
+            }
+
+            if (!TryGetHumanPatternPanelRect(out _))
+            {
+                Debug.LogWarning("TurnLoopDebugPresenter could not export the human pattern panel because its on-screen rect could not be resolved.");
+                return;
+            }
+
+            StartCoroutine(CaptureHumanPatternPanelPng(pattern));
+        }
+
+        private IEnumerator CaptureHumanPatternPanelPng(PatternTurn pattern)
+        {
+            exportInProgress = true;
+            yield return new WaitForEndOfFrame();
+
+            Texture2D screenshot = null;
+            Texture2D cropped = null;
+
+            try
+            {
+                if (!TryGetHumanPatternPanelRect(out Rect panelRect))
+                {
+                    Debug.LogWarning("TurnLoopDebugPresenter could not export the human pattern panel because its layout changed before capture completed.");
+                    yield break;
+                }
+
+                int superSize = Mathf.Max(1, exportSuperSize);
+                screenshot = ScreenCapture.CaptureScreenshotAsTexture(superSize);
+                if (screenshot == null)
+                {
+                    Debug.LogWarning("TurnLoopDebugPresenter failed to capture the screen texture for human panel export.");
+                    yield break;
+                }
+
+                // IMGUI rects use a top-left origin, but Texture2D pixel reads start at bottom-left.
+                if (!TryGetCropBounds(panelRect, superSize, screenshot.width, screenshot.height, out int cropX, out int cropY, out int cropWidth, out int cropHeight))
+                {
+                    Debug.LogWarning("TurnLoopDebugPresenter failed to crop the captured screen to the human pattern panel bounds.");
+                    yield break;
+                }
+
+                cropped = new Texture2D(cropWidth, cropHeight, TextureFormat.RGBA32, false);
+                cropped.SetPixels(screenshot.GetPixels(cropX, cropY, cropWidth, cropHeight));
+                cropped.Apply();
+
+                string exportDirectory = GetHumanPanelExportDirectory();
+                Directory.CreateDirectory(exportDirectory);
+
+                string filePath = Path.Combine(exportDirectory, BuildHumanPanelExportFileName(pattern, superSize));
+                File.WriteAllBytes(filePath, cropped.EncodeToPNG());
+                Debug.Log($"Human pattern panel PNG exported to: {filePath}");
+            }
+            finally
+            {
+                if (cropped != null)
+                {
+                    Destroy(cropped);
+                }
+
+                if (screenshot != null)
+                {
+                    Destroy(screenshot);
+                }
+
+                exportInProgress = false;
+            }
+        }
+
         private void AutoResolveReferences()
         {
             if (turnLoopController == null)
@@ -388,6 +489,71 @@ namespace IT4s.Debugging
 
             height += analysisTextStyle.CalcHeight(new GUIContent(lastAnalysisSummary), contentWidth);
             return Mathf.Max(height, MinimumAnalysisHeight);
+        }
+
+        private bool TryGetHumanPatternPanelRect(out Rect rect)
+        {
+            rect = default;
+            if (!showDebugUi)
+            {
+                return false;
+            }
+
+            float width = Mathf.Min(maxPanelWidth, Screen.width - (screenPadding.x * 2f));
+            if (width <= 0f)
+            {
+                return false;
+            }
+
+            float x = screenPadding.x;
+            float y = screenPadding.y + SummaryHeight + SectionSpacing;
+            float panelWidth = (width - SplitPanelSpacing) * 0.5f;
+            float humanHeight = humanPatternRenderer != null
+                ? humanPatternRenderer.GetPreferredHeight(panelWidth)
+                : 180f;
+            float analysisHeight = GetAnalysisPreferredHeight(panelWidth);
+            float comparisonHeight = Mathf.Max(humanHeight, analysisHeight);
+
+            rect = new Rect(x, y, panelWidth, comparisonHeight);
+            return rect.width > 0f && rect.height > 0f;
+        }
+
+        private string GetHumanPanelExportDirectory()
+        {
+            string relativeDirectory = string.IsNullOrWhiteSpace(exportFolderName)
+                ? Path.Combine("DiagnosticsOutput", "DebugPanelExports")
+                : exportFolderName;
+            return Path.GetFullPath(Path.Combine(Application.dataPath, "..", relativeDirectory));
+        }
+
+        private static string BuildHumanPanelExportFileName(PatternTurn pattern, int superSize)
+        {
+            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string turnFragment = pattern != null ? $"turn_{pattern.turnId}_" : string.Empty;
+            return $"human_pattern_{turnFragment}{timestamp}_x{superSize}.png";
+        }
+
+        private static bool TryGetCropBounds(
+            Rect panelRect,
+            int superSize,
+            int screenshotWidth,
+            int screenshotHeight,
+            out int cropX,
+            out int cropY,
+            out int cropWidth,
+            out int cropHeight)
+        {
+            int scaledXMin = Mathf.Clamp(Mathf.RoundToInt(panelRect.xMin * superSize), 0, screenshotWidth);
+            int scaledXMax = Mathf.Clamp(Mathf.RoundToInt(panelRect.xMax * superSize), 0, screenshotWidth);
+            int scaledYTop = Mathf.Clamp(Mathf.RoundToInt(panelRect.yMin * superSize), 0, screenshotHeight);
+            int scaledYBottom = Mathf.Clamp(Mathf.RoundToInt(panelRect.yMax * superSize), 0, screenshotHeight);
+
+            cropX = scaledXMin;
+            cropY = screenshotHeight - scaledYBottom;
+            cropWidth = scaledXMax - scaledXMin;
+            cropHeight = scaledYBottom - scaledYTop;
+
+            return cropWidth > 0 && cropHeight > 0;
         }
 
         private void ClearAnalysisPresentation()

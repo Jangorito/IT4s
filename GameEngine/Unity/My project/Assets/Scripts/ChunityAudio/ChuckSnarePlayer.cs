@@ -1,4 +1,5 @@
 using System.Collections;
+using IT4s.Diagnostics;
 using UnityEngine;
 
 [RequireComponent(typeof(ChuckMainInstance))]
@@ -21,7 +22,7 @@ public class ChuckSnarePlayer : MonoBehaviour
             if (v != 0)
             {
                 chuckReady = true;
-                Debug.Log("[UNITY] ChucK ckReady=1 (IT4Snare initialized)");
+                RuntimeDebugLog.Log("[UNITY] ChucK ckReady=1 (IT4Snare initialized)");
             }
         });
     }
@@ -49,7 +50,7 @@ public class ChuckSnarePlayer : MonoBehaviour
     {
         if (!chuckReady) return;
         chuck.BroadcastEvent("snareTrig");
-        Debug.Log("[UNITY] Broadcasted snareTrig event to ChucK.");
+        RuntimeDebugLog.Log("[UNITY] Broadcasted snareTrig event to ChucK.");
     }
 
     // Quick test: press LeftControl to hear snare

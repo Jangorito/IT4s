@@ -1,5 +1,6 @@
 using UnityEngine;
 using IT4s.Data;
+using IT4s.Diagnostics;
 using IT4s.Input;
 
 namespace IT4s.Rhythm
@@ -62,7 +63,7 @@ namespace IT4s.Rhythm
             }
 
             _turnManager.StartTurn(startSamples);
-            Debug.Log($"[TurnCaptureController] Begin capture for turn {_turnManager.CurrentTurnId} at {startSamples} samples");
+            RuntimeDebugLog.Log($"[TurnCaptureController] Begin capture for turn {_turnManager.CurrentTurnId} at {startSamples} samples");
             return true;
         }
 
@@ -100,7 +101,7 @@ namespace IT4s.Rhythm
             var hits = hitReceiver.Buffer.Slice(startSamples, endSamples);
             turnWindow = new TurnWindow(turnId, startSamples, endSamples, hits);
 
-            Debug.Log(
+            RuntimeDebugLog.Log(
                 $"[TurnCaptureController] End capture for turn {turnWindow.turnId} at {endSamples} samples " +
                 $"with {turnWindow.HitCount} hits in window.");
 
@@ -109,12 +110,12 @@ namespace IT4s.Rhythm
                 int n = Mathf.Min(turnWindow.HitCount, maxHitLogs);
                 for (int i = 0; i < n; i++)
                 {
-                    Debug.Log($"  {turnWindow.Hits[i]}");
+                    RuntimeDebugLog.Log($"  {turnWindow.Hits[i]}");
                 }
 
                 if (turnWindow.HitCount > n)
                 {
-                    Debug.Log($"  ... +{turnWindow.HitCount - n} more");
+                    RuntimeDebugLog.Log($"  ... +{turnWindow.HitCount - n} more");
                 }
             }
 
@@ -128,7 +129,7 @@ namespace IT4s.Rhythm
                 return;
             }
 
-            Debug.Log($"[TurnCaptureController] Cancelling capture for turn {_turnManager.CurrentTurnId}.");
+            RuntimeDebugLog.Log($"[TurnCaptureController] Cancelling capture for turn {_turnManager.CurrentTurnId}.");
             _turnManager.CancelTurn();
         }
     }

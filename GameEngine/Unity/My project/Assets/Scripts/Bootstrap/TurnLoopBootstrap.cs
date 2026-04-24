@@ -1,4 +1,5 @@
 using IT4s.Input;
+using IT4s.Diagnostics;
 using IT4s.Orchestration;
 using IT4s.Rhythm;
 using IT4s.Rhythm.Generation.Skeleton;
@@ -16,6 +17,7 @@ namespace IT4s.Bootstrap
     /// This component wires the existing collaborators together, injects them into the
     /// TurnLoopController, and starts the loop. It deliberately contains no loop logic.
     /// </summary>
+    [DefaultExecutionOrder(-1000)]
     public class TurnLoopBootstrap : MonoBehaviour
     {
         private const int BelaSampleRateHz = 44100;
@@ -50,6 +52,16 @@ namespace IT4s.Bootstrap
         [Tooltip("Small grace period added after the estimated AI response duration before re-arming human input.")]
         private float aiPlaybackCompletionPaddingSeconds = 0.05f;
 
+        [Header("Debug Logging")]
+        [SerializeField]
+        [Tooltip("When disabled, suppresses TurnLoopController debug messages while keeping warnings/errors intact.")]
+        private bool enableTurnLoopDebugMessages = true;
+
+        [Header("Evaluation Trace")]
+        [SerializeField]
+        [Tooltip("When enabled, prints a clean dissertation-ready trace of the main turn-loop phases.")]
+        private bool enableEvaluationTrace;
+
         private PatternCompiler patternCompiler;
         private FeatureTransformer featureTransformer;
         private TurnAnalyser turnAnalyser;
@@ -57,14 +69,19 @@ namespace IT4s.Bootstrap
         private ISkeletonBuilder skeletonBuilder;
         private SkeletonBuilderConfig skeletonBuilderConfig;
         private MusicalTimingConfig initialTimingConfig;
+        private EvaluationTraceLogger evaluationTraceLogger;
 
         private void Awake()
         {
+            RuntimeDebugLog.SuppressInformationalLogs = enableEvaluationTrace;
+
             if (!ValidateSceneReferences())
             {
                 enabled = false;
                 return;
             }
+
+            turnLoopController.ConfigureDebugMessages(false);
 
             patternCompiler = new PatternCompiler();
             featureTransformer = new FeatureTransformer();
@@ -104,7 +121,13 @@ namespace IT4s.Bootstrap
                 returnToWaitingAfterAiPlayback,
                 aiPlaybackCompletionPaddingSeconds);
 
-            Debug.Log($"[TurnLoopBootstrap] Turn loop collaborators wired with timing {initialTimingConfig}.");
+            ConfigureEvaluationTrace();
+            turnLoopController.ConfigureDebugMessages(enableTurnLoopDebugMessages && !enableEvaluationTrace);
+
+            if (!enableEvaluationTrace)
+            {
+                RuntimeDebugLog.Log($"[TurnLoopBootstrap] Turn loop collaborators wired with timing {initialTimingConfig}.");
+            }
         }
 
         private void Start()
@@ -113,8 +136,19 @@ namespace IT4s.Bootstrap
             {
                 return;
             }
+
             turnLoopController.StartLoop();
-            Debug.Log("[TurnLoopBootstrap] Turn loop started.");
+
+            if (!enableEvaluationTrace)
+            {
+                RuntimeDebugLog.Log("[TurnLoopBootstrap] Turn loop started.");
+            }
+        }
+
+        private void OnDestroy()
+        {
+            evaluationTraceLogger?.Dispose();
+            evaluationTraceLogger = null;
         }
 
         private bool ValidateSceneReferences()
@@ -144,6 +178,14 @@ namespace IT4s.Bootstrap
             }
 
             return true;
+        }
+
+        private void ConfigureEvaluationTrace()
+        {
+            evaluationTraceLogger?.Dispose();
+            evaluationTraceLogger = enableEvaluationTrace
+                ? new EvaluationTraceLogger(turnLoopController)
+                : null;
         }
 
         private static TurnAnalyser CreateTurnAnalyser()

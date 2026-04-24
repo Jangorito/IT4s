@@ -1,3 +1,4 @@
+using IT4s.Diagnostics;
 using UnityEngine;
 using extOSC;
 
@@ -52,7 +53,7 @@ namespace IT4s.Input
                 SendHit();
             }
 
-            Debug.Log($"[FakeBelaOscSender] Started. Sending fake hits to {transmitter.RemoteHost}:{transmitter.RemotePort}");
+            RuntimeDebugLog.Log($"[FakeBelaOscSender] Started. Sending fake hits to {transmitter.RemoteHost}:{transmitter.RemotePort}");
         }
 
         private void Update()

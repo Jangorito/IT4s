@@ -1,3 +1,4 @@
+using IT4s.Diagnostics;
 using UnityEngine;
 
 namespace IT4s.Input
@@ -56,19 +57,19 @@ namespace IT4s.Input
                 case InputMode.LiveBelaOsc:
                     SetFakeRigEnabled(false);
                     SetKeyboardEmulatorEnabled(false);
-                    Debug.Log("[InputModeBootstrap] Mode = Live Bela OSC");
+                    RuntimeDebugLog.Log("[InputModeBootstrap] Mode = Live Bela OSC");
                     break;
 
                 case InputMode.FakeOscRig:
                     SetFakeRigEnabled(true);
                     SetKeyboardEmulatorEnabled(false);
-                    Debug.Log("[InputModeBootstrap] Mode = Fake OSC Rig");
+                    RuntimeDebugLog.Log("[InputModeBootstrap] Mode = Fake OSC Rig");
                     break;
 
                 case InputMode.KeyboardOscEmulator:
                     SetFakeRigEnabled(false);
                     SetKeyboardEmulatorEnabled(true);
-                    Debug.Log("[InputModeBootstrap] Mode = Keyboard OSC Emulator");
+                    RuntimeDebugLog.Log("[InputModeBootstrap] Mode = Keyboard OSC Emulator");
                     break;
 
                 default:

@@ -1,3 +1,4 @@
+using IT4s.Diagnostics;
 using UnityEngine;
 
 namespace IT4s.Rhythm
@@ -22,7 +23,7 @@ namespace IT4s.Rhythm
         /// </summary>
         public void StartTurn(long startSamples)
         {
-            Debug.Log($"[TurnManager] Starting turn {_nextTurnId} at {startSamples} samples");
+            RuntimeDebugLog.Log($"[TurnManager] Starting turn {_nextTurnId} at {startSamples} samples");
 
             _isActive = true;
             _startSamples = startSamples;
@@ -33,7 +34,7 @@ namespace IT4s.Rhythm
         /// </summary>
         public void EndTurn(long endSamples, out int turnId, out long startSamples)
         {
-            Debug.Log($"[TurnManager] Ending turn {_nextTurnId} at {endSamples} samples");
+            RuntimeDebugLog.Log($"[TurnManager] Ending turn {_nextTurnId} at {endSamples} samples");
 
             turnId = _nextTurnId;
             startSamples = _startSamples;
@@ -53,7 +54,7 @@ namespace IT4s.Rhythm
                 return;
             }
 
-            Debug.Log($"[TurnManager] Cancelling turn {_nextTurnId} that started at {_startSamples} samples");
+            RuntimeDebugLog.Log($"[TurnManager] Cancelling turn {_nextTurnId} that started at {_startSamples} samples");
 
             _isActive = false;
             _startSamples = 0;

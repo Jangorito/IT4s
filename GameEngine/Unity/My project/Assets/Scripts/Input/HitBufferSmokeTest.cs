@@ -1,5 +1,6 @@
 using UnityEngine;
 using IT4s.Data;
+using IT4s.Diagnostics;
 using IT4s.Input;
 
 public class HitBufferSmokeTest : MonoBehaviour
@@ -15,7 +16,7 @@ public class HitBufferSmokeTest : MonoBehaviour
         _buffer.Add(new HitEvent(3000, 0, 70));
 
         var slice = _buffer.Slice(1200, 3200);
-        Debug.Log($"HitBuffer count={_buffer.Count}, slice={slice.Count}");
-        foreach (var h in slice) Debug.Log(h.ToString());
+        RuntimeDebugLog.Log($"HitBuffer count={_buffer.Count}, slice={slice.Count}");
+        foreach (var h in slice) RuntimeDebugLog.Log(h.ToString());
     }
 }

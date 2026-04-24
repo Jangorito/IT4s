@@ -104,6 +104,11 @@ namespace IT4s.Orchestration
         [Tooltip("Temporary debug key used to manually re-arm the loop for another human capture.")]
         private KeyCode debugRearmKey = KeyCode.Space;
 
+        [Header("Debug Logging")]
+        [SerializeField]
+        [Tooltip("When enabled, emits TurnLoopController debug messages to the Unity console and debug observers.")]
+        private bool emitDebugMessages = true;
+
         private bool returnToWaitingAfterAiPlayback;
         private float aiPlaybackCompletionPaddingSeconds = 0.05f;
         private float aiPlaybackCompletionRealtimeSeconds = -1f;
@@ -128,6 +133,7 @@ namespace IT4s.Orchestration
         public KeyCode DebugRearmKey => debugRearmKey;
         public bool ReturnToWaitingAfterAiPlaybackEnabled => returnToWaitingAfterAiPlayback;
         public float AiPlaybackCompletionPaddingSeconds => aiPlaybackCompletionPaddingSeconds;
+        public bool DebugMessagesEnabled => emitDebugMessages;
 
         // Running state is kept separate from CurrentPhase so the loop can be paused or stopped
         // without needing extra domain phases before they are truly justified.
@@ -250,6 +256,11 @@ namespace IT4s.Orchestration
                 $"(padding={aiPlaybackCompletionPaddingSeconds:0.###}s).");
         }
 
+        public void ConfigureDebugMessages(bool enabled)
+        {
+            emitDebugMessages = enabled;
+        }
+
         /// <summary>
         /// Activates the orchestration loop and moves it into the human-ready idle state.
         /// No turn logic is executed here yet; this simply establishes the initial phase.
@@ -272,8 +283,8 @@ namespace IT4s.Orchestration
             isRunning = true;
             ClearScheduledAiPlaybackLoopClosure();
             ClearCaptureRuntimeState();
-            EmitDebugMessage($"Turn loop started. {DescribeDependencyState()}");
             SetPhase(TurnPhase.WaitingForHuman);
+            EmitDebugMessage($"Turn loop started. {DescribeDependencyState()}");
         }
 
         /// <summary>
@@ -445,6 +456,11 @@ namespace IT4s.Orchestration
 
         private void EmitDebugMessage(string message)
         {
+            if (!emitDebugMessages)
+            {
+                return;
+            }
+
             Debug.Log($"[TurnLoopController] {message}");
             OnDebugMessage?.Invoke(message);
         }

@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using IT4s.Data;
+using IT4s.Diagnostics;
 using IT4s.Rhythm;
 
 
@@ -70,7 +71,7 @@ namespace IT4s.Rhythm.Transformations
                 // Debug.Log($"[LOOP{i}]______| tripling = {tripling} | finalIndex = {finalIndex} | stepHit = {stepHit} | hit = {hit}");
             }
 
-            Debug.Log($"finalIndex velocities: {string.Join(", ", targetVelocities)}");
+            RuntimeDebugLog.Log($"finalIndex velocities: {string.Join(", ", targetVelocities)}");
             var outTurn = pattern;
             pattern.velocity = targetVelocities;
             return outTurn; 
@@ -125,7 +126,7 @@ namespace IT4s.Rhythm.Transformations
                 // Debug.Log($"[LOOP{i}]______| tripling = {tripling} | finalIndex = {finalIndex} | stepHit = {stepHit} | hit = {hit}");
             }
 
-            Debug.Log($"finalIndex velocities: {string.Join(", ", targetVelocities)}");
+            RuntimeDebugLog.Log($"finalIndex velocities: {string.Join(", ", targetVelocities)}");
             var outTurn = pattern;
             pattern.velocity = targetVelocities;
             return outTurn; 

@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using IT4s.Data;
+using IT4s.Diagnostics;
 
 // extOSC namespaces:
 using extOSC;
@@ -53,7 +54,7 @@ namespace IT4s.Input
                 return;
             }
 
-            Debug.Log($"[OscHitReceiver] Listening on address={address}");
+            RuntimeDebugLog.Log($"[OscHitReceiver] Listening on address={address}");
         }
 
         private void OnEnable()
@@ -115,7 +116,7 @@ namespace IT4s.Input
 
             if (logEveryHit || (logEveryNHits > 0 && (_buffer.Count % logEveryNHits) == 0))
             {
-                Debug.Log(
+                RuntimeDebugLog.Log(
                     $"[OscHitReceiver] hits={_buffer.Count} last={tSamples} " +
                     $"(hi={tHigh}, lo={tLow}) pad={pad} vel={vel}"
                 );

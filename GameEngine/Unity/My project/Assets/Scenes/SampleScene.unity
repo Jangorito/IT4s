@@ -889,7 +889,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   receiver: {fileID: 1812478580}
   address: /it4/hit
-  logEveryHit: 1
+  logEveryHit: 0
   logEveryNHits: 5
   sampleRate: 44100
 --- !u!114 &1812478580
@@ -961,6 +961,7 @@ MonoBehaviour:
   debugHoldKey: 304
   enableDebugRearmHotkey: 1
   debugRearmKey: 32
+  emitDebugMessages: 1
 --- !u!114 &1812478584
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1085,6 +1086,10 @@ MonoBehaviour:
   barsPerTurn: 2
   stepsPerQuarter: 12
   sampleRate: 44100
+  returnToWaitingAfterAiPlayback: 1
+  aiPlaybackCompletionPaddingSeconds: 0.05
+  enableTurnLoopDebugMessages: 0
+  enableEvaluationTrace: 1
 --- !u!114 &2063823085
 MonoBehaviour:
   m_ObjectHideFlags: 0

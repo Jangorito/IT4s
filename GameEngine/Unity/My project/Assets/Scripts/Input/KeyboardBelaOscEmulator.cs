@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using IT4s.Diagnostics;
 using UnityEngine;
 using extOSC;
 
@@ -235,7 +236,7 @@ namespace IT4s.Input
 
             if (verboseLogging)
             {
-                Debug.Log(
+                RuntimeDebugLog.Log(
                     $"[KeyboardBelaOscEmulator] key={key} ts={timestamp} hi={hi} lo={lo} pad={pad} vel={velocity}"
                 );
             }

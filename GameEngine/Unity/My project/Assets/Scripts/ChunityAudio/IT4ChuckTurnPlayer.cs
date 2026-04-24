@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using UnityEngine;
 using IT4s.Data;
+using IT4s.Diagnostics;
 
 public class IT4ChuckTurnPlayer : MonoBehaviour
 {
@@ -50,7 +51,7 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
             yield return new WaitForSeconds(0.05f);
         }
 
-        Debug.Log("[IT4] ChucK TurnPlayer ready.");
+        RuntimeDebugLog.Log("[IT4] ChucK TurnPlayer ready.");
     }
 
     public void SetMetronomeEnabled(bool enabled)
@@ -72,7 +73,7 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
         }
 
         chuck.BroadcastEvent("stopTurn");
-        Debug.Log("[IT4] Broadcasted 'stopTurn'.");
+        RuntimeDebugLog.Log("[IT4] Broadcasted 'stopTurn'.");
         return true;
     }
 
@@ -151,7 +152,7 @@ public class IT4ChuckTurnPlayer : MonoBehaviour
         }
 
         chuck.BroadcastEvent("playTurn");
-        Debug.Log(
+        RuntimeDebugLog.Log(
             $"[IT4] Broadcasted 'playTurn' turn={turn.turnId} " +
             $"steps={stepCount} samplesPerStep={samplesPerStep} " +
             $"metronome={(useMetronome ? "on" : "off")}"
