@@ -1,7 +1,9 @@
 {
     "name": "extOSC.Editor",
     "references": [
-        "extOSC"
+        "extOSC",
+        "UnityEngine.UI",
+        "UnityEditor.UI"
     ],
     "includePlatforms": [
         "Editor"
