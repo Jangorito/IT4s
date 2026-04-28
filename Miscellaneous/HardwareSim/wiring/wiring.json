@@ -1,0 +1,110 @@
+{
+  "parts": [
+    {
+      "id": "bb_1",
+      "type": "breadboard-half",
+      "parentId": null,
+      "position": { "x": 0, "y": 0, "z": 0 },
+      "terminals": []
+    },
+    {
+      "id": "arduino_1",
+      "type": "arduino-uno",
+      "parentId": null,
+      "position": { "x": -0.09, "y": 0, "z": 0 },
+      "terminals": []
+    },
+    {
+      "id": "piezo_1",
+      "type": "piezo-buzzer",
+      "parentId": null,
+      "position": { "x": 0.12, "y": 0, "z": 0 },
+      "terminals": []
+    },
+    {
+      "id": "r_series",
+      "type": "resistor-100000",
+      "parentId": "bb_1",
+      "terminals": [
+        { "name": "pin1", "connection": "10a" },
+        { "name": "pin2", "connection": "14a" }
+      ]
+    },
+    {
+      "id": "r_bleed",
+      "type": "resistor-1000000",
+      "parentId": "bb_1",
+      "terminals": [
+        { "name": "pin1", "connection": "14b" },
+        { "name": "pin2", "connection": "18b" }
+      ]
+    },
+    {
+      "id": "we_1",
+      "type": "wire-end",
+      "parentId": "piezo_1",
+      "terminals": [{ "name": "t1", "connection": "plus" }]
+    },
+    {
+      "id": "we_2",
+      "type": "wire-end",
+      "parentId": "bb_1",
+      "terminals": [{ "name": "t1", "connection": "10e" }]
+    },
+    {
+      "id": "we_3",
+      "type": "wire-end",
+      "parentId": "bb_1",
+      "terminals": [{ "name": "t1", "connection": "14d" }]
+    },
+    {
+      "id": "we_4",
+      "type": "wire-end",
+      "parentId": "arduino_1",
+      "terminals": [{ "name": "t1", "connection": "A0" }]
+    },
+    {
+      "id": "we_5",
+      "type": "wire-end",
+      "parentId": "piezo_1",
+      "terminals": [{ "name": "t1", "connection": "minus" }]
+    },
+    {
+      "id": "we_6",
+      "type": "wire-end",
+      "parentId": "bb_1",
+      "terminals": [{ "name": "t1", "connection": "rail_top_negative_5" }]
+    },
+    {
+      "id": "we_7",
+      "type": "wire-end",
+      "parentId": "bb_1",
+      "terminals": [{ "name": "t1", "connection": "18d" }]
+    },
+    {
+      "id": "we_8",
+      "type": "wire-end",
+      "parentId": "bb_1",
+      "terminals": [{ "name": "t1", "connection": "rail_top_negative_10" }]
+    },
+    {
+      "id": "we_9",
+      "type": "wire-end",
+      "parentId": "arduino_1",
+      "terminals": [{ "name": "t1", "connection": "GND" }]
+    },
+    {
+      "id": "we_10",
+      "type": "wire-end",
+      "parentId": "bb_1",
+      "terminals": [{ "name": "t1", "connection": "rail_top_negative_20" }]
+    }
+  ],
+  "wires": [
+    { "id": "w1", "color": "red",   "from": "we_1", "to": "we_2" },
+    { "id": "w2", "color": "green", "from": "we_3", "to": "we_4" },
+    { "id": "w3", "color": "black", "from": "we_5", "to": "we_6" },
+    { "id": "w4", "color": "black", "from": "we_7", "to": "we_8" },
+    { "id": "w5", "color": "black", "from": "we_9", "to": "we_10" }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "description": "Bela piezo disc sensor — analog input with DC filtering and onset detection",
+  "analog": {
+    "enable": true,
+    "channels": 2,
+    "sampleRate": "half"
+  },
+  "digital": {
+    "enable": false
+  },
+  "audioChannels": {
+    "in": 2,
+    "out": 2
+  },
+  "notes": [
+    "Analog must be enabled in the Bela IDE (Settings → Analog) for analogRead() to work.",
+    "sampleRate 'half' = 22.05 kHz (one analog sample per 2 audio frames).",
+    "Connect piezo signal through 100k series R to analog header pin 0 (channel 0).",
+    "Connect 1 MΩ bleed resistor from the same signal node to GND.",
+    "Bela analog input range: 0 V – 4.096 V (12-bit ADC, normalized to 0.0–1.0).",
+    "Do not exceed 1.8 V on BeagleBone GPIO — the Bela frontend conditions the signal, but large piezo strikes can spike above 4 V. The 100k series R limits transient current."
+  ]
+}
