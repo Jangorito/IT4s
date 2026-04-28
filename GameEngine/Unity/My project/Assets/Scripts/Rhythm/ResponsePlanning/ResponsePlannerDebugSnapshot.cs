@@ -59,7 +59,7 @@ namespace IT4s.Rhythm.ResponsePlanning
     public sealed class ResponsePlannerDescriptorSummary
     {
         public ResponsePlannerDescriptorSummary()
-            : this(string.Empty, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
+            : this(string.Empty, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
         {
         }
 
@@ -79,7 +79,8 @@ namespace IT4s.Rhythm.ResponsePlanning
             bool activityIsBalanced,
             bool hasConversationalSpace,
             bool isPredictableProfile,
-            bool isCongested)
+            bool isCongested,
+            bool isPressurised)
         {
             Summary = summary ?? string.Empty;
             IsSparse = isSparse;
@@ -97,6 +98,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             HasConversationalSpace = hasConversationalSpace;
             IsPredictableProfile = isPredictableProfile;
             IsCongested = isCongested;
+            IsPressurised = isPressurised;
         }
 
         public string Summary { get; private set; }
@@ -115,6 +117,7 @@ namespace IT4s.Rhythm.ResponsePlanning
         public bool HasConversationalSpace { get; private set; }
         public bool IsPredictableProfile { get; private set; }
         public bool IsCongested { get; private set; }
+        public bool IsPressurised { get; private set; }
     }
 
     [Serializable]

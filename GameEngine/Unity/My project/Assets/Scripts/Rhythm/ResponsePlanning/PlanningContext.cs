@@ -18,6 +18,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             bool isHighEnergy,
             bool hasConversationalSpace,
             bool isCongested,
+            bool isPressurised,
             bool isPredictableProfile,
             int turnLengthSteps)
         {
@@ -36,6 +37,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             IsHighEnergy = isHighEnergy;
             HasConversationalSpace = hasConversationalSpace;
             IsCongested = isCongested;
+            IsPressurised = isPressurised;
             IsPredictableProfile = isPredictableProfile;
             TurnLengthSteps = turnLengthSteps;
         }
@@ -58,6 +60,7 @@ namespace IT4s.Rhythm.ResponsePlanning
         public bool HasConversationalSpace { get; }
         public bool HasMeaningfulGaps => HasConversationalSpace;
         public bool IsCongested { get; }
+        public bool IsPressurised { get; }
         public bool IsPredictableProfile { get; }
         public int TurnLengthSteps { get; }
     }

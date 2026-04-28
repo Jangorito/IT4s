@@ -84,6 +84,9 @@ namespace IT4s.Rhythm.ResponsePlanning
                 sourceDensity <= config.ConversationalSpaceDensityThreshold &&
                 !endingIsOpen;
             bool isCongested = sourceDensity >= config.CongestedDensityThreshold || (isBusy && isHighEnergy);
+            bool isPressurised =
+                isHighEnergy &&
+                sourceDensity >= config.PressurisedDensityThreshold;
             bool isPredictableProfile = IsPredictableShape(profile.DensityShape) || IsPredictableShape(profile.EnergyShape);
 
             return new PlanningContext(
@@ -102,6 +105,7 @@ namespace IT4s.Rhythm.ResponsePlanning
                 isHighEnergy,
                 hasConversationalSpace,
                 isCongested,
+                isPressurised,
                 isPredictableProfile,
                 GetTurnLengthSteps(analysis));
         }
@@ -264,8 +268,9 @@ namespace IT4s.Rhythm.ResponsePlanning
             if (context.IsBusy) score += config.DensityPrimaryScore;
             if (context.IsHighEnergy) score += config.EnergyPrimaryScore;
             if (context.IsCongested) score += config.CongestionScore;
+            if (context.IsPressurised) score += config.PressurisedScore;
             if (context.IsPredictableProfile) score += config.ProfileRefinementScore * 0.5f;
-            if (context.IsSparse) score -= config.DensityPrimaryScore;
+            if (context.IsSparse && !context.IsPressurised) score -= config.DensityPrimaryScore;
             if (context.IsLowEnergy) score -= config.EnergyPrimaryScore * 0.5f;
             return score;
         }
@@ -273,13 +278,14 @@ namespace IT4s.Rhythm.ResponsePlanning
         private static float ScoreIntensify(PlanningContext context, ResponsePlannerConfig config)
         {
             float score = 0f;
-            if (context.IsSparse) score += config.DensityPrimaryScore;
+            if (context.IsSparse && !context.IsPressurised) score += config.DensityPrimaryScore;
             if (context.IsLowEnergy) score += config.EnergyPrimaryScore;
             else if (context.IsMediumEnergy) score += config.EnergyPrimaryScore * 0.5f;
             if (!context.HasMeaningfulAnchors) score += config.AnchorRefinementScore * 0.5f;
             if (!context.HasStrongEnding) score += config.EndingRefinementScore * 0.5f;
             if (context.IsBusy) score -= config.DensityPrimaryScore * 0.75f;
             if (context.IsCongested) score -= config.CongestionScore;
+            if (context.IsPressurised) score -= config.PressurisedScore;
             return score;
         }
 
@@ -585,7 +591,8 @@ namespace IT4s.Rhythm.ResponsePlanning
                 context.ActivityIsBalanced,
                 context.HasConversationalSpace,
                 context.IsPredictableProfile,
-                context.IsCongested);
+                context.IsCongested,
+                context.IsPressurised);
         }
 
         private static ResponsePlannerNumericSummary CreateNumericSummary(PlanningContext context)
@@ -640,6 +647,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             else if (context.ActivityIsBalanced) descriptors.Add("BalancedProfile");
             if (context.IsPredictableProfile) descriptors.Add("PredictableProfile");
             if (context.IsCongested) descriptors.Add("Congested");
+            if (context.IsPressurised) descriptors.Add("Pressurised");
 
             return descriptors.Count == 0
                 ? "Neutral"
