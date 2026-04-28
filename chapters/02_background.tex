@@ -1,0 +1,411 @@
+\chapter{Background \& Related Work}\label{background-related-work}
+
+\section{Musical Metacreation and Machine Musicianship}\label{musical-metacreation-and-machine-musicianship}
+
+The term Musical Metacreation \citep{pasquier2016introduction} provides the broad
+research context describing systems that use computation to participate
+in musical tasks such as composition, performance, improvisation and
+accompaniment. However, machine creativity within this field is not
+uniformly defined. Some systems frame creativity as the autonomous
+production of musical artefacts, while others understand it as an
+interactive process shaped by human input, shared agency and real-time
+response.
+
+This section reviews the literature across three conceptual axes:
+autonomous generation versus co-creative interaction, machine output
+versus human-machine process and independent musical authorship versus
+responsive machine musicianship. This framing is important for
+conceptualising the essence of creativity within IT4s.
+
+\subsection{Musical Metacreation As A Field}\label{musical-metacreation-as-a-field}
+
+Musical metacreation, often abbreviated as MuMe, describes computational
+systems that take on creative musical tasks. The definition's breadth is
+useful for situating Intelli-Trading Fours but requires a more precise
+classification of the project's contribution. Rather than treating all
+AI music systems as a homogenous category, the following discussion
+distinguishes between systems that generate musical material
+independently and systems whose creative behaviour is contingent on live
+human interaction.
+
+For IT4s, the usefulness of MuMe is not that it legitimises any
+computational music system as ``creative'', but that it provides a
+vocabulary for locating different forms of machine musical agency. The
+project sits inside this field because it delegates parts of musical
+interaction to software: listening, representation, analysis, planning
+and playback. However, its contribution is narrower than autonomous
+musical authorship. The system's musical behaviour depends on a human
+rhythmic turn and is therefore better understood as interactive machine
+musicianship.
+
+\subsection{Autonomous Generative Agents}\label{autonomous-generative-agents}
+
+One strand of musical metacreation frames machine creativity primarily
+through autonomous generation. In such systems, creative behaviour
+emerges from processes that are largely self-contained within the
+computational domain through learned models, internal rules or agent
+based interaction with other software entities.
+
+Eigenfeldt's Musebots exemplify this approach, demonstrating musical
+collaboration between autonomous agents whose creative agency remains
+largely within the computational system without strict temporal
+dependency on external input rather than being negotiated in an exchange
+with a live performer \citep{eigenfeldt2013musebots}. While this model is useful for
+understanding machine autonomy, it differs from the interactional
+problem addressed in this work, where responses must be derived from
+temporally bounded human input.
+
+\subsection{Interactive And Co-Creative Machine Musicianship}\label{interactive-and-co-creative-machine-musicianship}
+
+A contrasting perspective frames creativity not solely within autonomous
+generation, but within the interaction between a computational system
+and a human performer. In this model, the machine's musical behaviour is
+informed by what the performer has just played, positioning the system's
+contribution as a response, continuation, transformation or
+accompaniment rather than as an isolated artefact.
+
+Pachet's Continuator is a significant example of this
+performer-conditioned approach. The system learns from a musician's
+input and generates stylistically related continuations in real time,
+bridging autonomous generation with interactive musical performance
+\citep{pachet2002continuator}. Its relevance lies less in its specific modelling
+method, instead framing machine musicianship as contextually responsive
+participation.
+
+The Continuator demonstrates that a computational system can derive
+musical material from a performer's contribution and return output that
+is meaningful within an ongoing exchange, however, Intelli-Trading Fours
+takes a different design route. Rather than pursuing style-learning
+continuation, its architecture is explicitly segmented. This results in
+a system more limited as a generative model, but more transparent and
+interpretable as an interaction architecture.
+
+\subsection{Product-Centred Versus Process-Centred Creativity}\label{product-centred-versus-process-centred-creativity}
+
+The distinction between autonomous and interactive systems also affects
+how creativity should be evaluated. Product-centred approaches focus on
+the quality of the generated musical artefact, which is appropriate for
+systems that produce self-contained compositions or standalone musical
+outputs. However, interactive music systems require a more
+process-centred view. Their creative value cannot be judged only by the
+standalone quality of generated material when it also depends on how the
+system participates in the unfolding exchange with a performer.
+
+Smith's account of human-AI musical partnerships frames agency, control
+and collaboration as interactional concerns, while Ostermann et al.'s
+evaluation of reactive jazz accompaniment demonstrates that perceived
+creativity and musical usefulness can be assessed through the user's
+experience of real-time system behaviour rather than through output
+alone \citep{smith2022humanai,ostermann2021evaluating}.
+
+This is particularly relevant to Intelli-Trading Fours, where the
+central contribution lies not in claiming a finished autonomous
+generative model, but in an observable and inspectable closed-loop
+pipeline.
+
+\section{Human-AI Improvisation and Co-Creative Systems}\label{human-ai-improvisation-and-co-creative-systems}
+
+Having positioned Intelli-Trading Fours as a form of interactive machine
+musicianship, this section considers what makes human-AI musical
+interaction meaningful in practice. In improvisational contexts, the
+system's value does not depend only on the material it generates, but on
+how it listens, responds, shares agency and sustains the performer's
+sense of an unfolding musical exchange.
+
+\subsection{Improvisation As Perception And Response}\label{improvisation-as-perception-and-response}
+
+A central problem in human-AI improvisation is that the system must
+treat performer input as musical context rather than as arbitrary data.
+Thom's work on real-time interactive improvisation is useful here
+because it frames improvisational companionship as a time-sensitive
+problem of perception and response, where the system must interpret live
+musical material quickly enough to produce an appropriate continuation
+or accompaniment \citep{thom2000bob}. Similarly, Pachet's Continuator
+demonstrates how performer input can become the basis for real-time
+musical continuation, showing that machine-generated material can
+function as part of a live exchange rather than as a detached
+composition \citep{pachet2002continuator}. Together, these systems frame improvisation
+as a perception-response loop in which listening and generation are
+mutually dependent rather than separate stages.
+
+Intelli-Trading Fours adopts this perception-response principle, but
+narrows it to a turn-based rhythmic setting. This differs from systems
+that attempt continuous accompaniment or stylistic continuation across
+an open-ended performance. The specific musical basis for this
+turn-taking model is developed further in Section 2.5.
+
+\section{Reactive, Predictive and Generative Musical Agents}\label{reactive-predictive-and-generative-musical-agents}
+
+The previous section established human-AI improvisation as an
+interaction loop in which perception, timing and agency shape the
+musical exchange. This raises a further question: what is the nature of
+this interaction? Interactive music systems can be positioned along a
+spectrum from reactive systems, which respond directly to current input;
+to predictive systems, which model likely future behaviour; and
+generative systems, which produce more independent or stylistically
+developed musical material. This distinction is not hierarchical, but
+reflects different approaches to modelling interaction, agency and
+musical structure.
+
+\subsection{Reactive Musical Interaction}\label{reactive-musical-interaction}
+
+Reactive musical systems respond to performer input, environmental
+events or changing musical state. Petit and Serrano's work on reactive
+programming for interactive structured music is helpful here for
+presenting how musical systems can combine deterministic structure with
+live or nondeterministic interaction through explicit states, events and
+patterns \citep{petit2021reactive}. This supports the view that
+real-time musical responsiveness often depends on architecture as much
+as on generation.
+
+Systems adopting this approach often structure behaviour around
+externally conditioned responses, where output is derived from recent or
+current input rather than from an independent generative process. Such
+systems may still incorporate structured decision-making and internal
+constraints, but their defining behaviour is anchored in the interaction
+context.
+
+\subsection{Predictive Interactive Systems}\label{predictive-interactive-systems}
+
+Predictive musical systems extend this idea by modelling likely future
+behaviour. Martin and Torresen's Interactive Musical Prediction System,
+for example, uses mixture density recurrent neural networks to predict
+future user control data in real time \citep{martin2019interactive}. Such
+systems can support powerful forms of musical assistance and
+co-performance but they also introduce different trade-offs around
+training data, opacity, evaluation and control.
+
+\subsection{Generative Response And Drum-Performance Models}\label{generative-response-and-drum-performance-models}
+
+Generative musical agents prioritise the production of novel musical
+material, often using learned models or rule-based systems to construct
+patterns that extend beyond direct transformation of input.
+
+Pachet's Continuator remains relevant here as it combines interaction
+with stylistically informed continuation \citep{pachet2002continuator}. More recent
+learning-based work also frames musical response generation as a
+data-driven problem. Hu et al., for example, approach call-and-response
+as automatic composition using a knowledge-enhanced model, while Gillick
+et al. demonstrate learned drum-performance generation and humanisation
+through sequence transformation \citep{hu2024responding,gillick2019learning}. These systems are useful comparison points because they
+demonstrate response generation beyond simple transformation or
+rule-based planning.
+
+\subsection{Positioning Intelli-Trading Fours}\label{positioning-intelli-trading-fours}
+
+The distinction between reactive, predictive and generative agents is
+therefore not a hierarchy in which reactive systems are automatically
+weaker. Vaggione's critique of simple deterministic-versus-random
+framings is useful here because it suggests that musical structure can
+emerge through constraints operating across different temporal levels
+rather than through unconstrained generation alone \citep{vaggione1993determinism}.
+
+Intelli-Trading Fours is best understood as a reactive, planning-led,
+turn-based musical agent with partial generative structure. Its
+behaviour is conditioned on recent human input, mediated through
+interpretable analysis and planning stages. Compared with predictive and
+fully generative systems, this approach prioritises transparency,
+controllability and architectural clarity over expressive autonomy.
+
+This partial generative structure reflects the core contribution of the
+work: not autonomous musical creativity, but the design of a structured
+and interpretable interaction system.
+
+\section{Rhythm, Timing, Entrainment \& Turn-Taking}\label{rhythm-timing-entrainment-turn-taking}
+
+It is important to note that the interaction problem is specifically
+rhythmic. Rhythm is not simply musical content that can be generated
+after the fact; it is a temporal medium through which performers
+coordinate action, perceive structure and experience responsiveness
+\citep{longuetHiggins1984rhythmic}. This makes timing a central design
+concern for IT4s as responses must be situated appropriately within a
+shared temporal framework.
+
+\subsection{Rhythm As A Time-Sensitive Interaction Medium}\label{rhythm-as-a-time-sensitive-interaction-medium}
+
+In musical interaction, rhythmic information is not experienced solely
+as an abstract pattern; it is felt through the timing of events with
+respect to the performer's expectation of when future events should
+occur. This is especially important in percussion-based interaction,
+where pitch and harmony do not contribute to its evaluation as much as
+musical properties such as: onset timing, density, accent and dynamic
+energy.
+
+This requires positioning rhythm as both data and interaction. The
+system should not merely need to detect that a drum hit happened; it
+needs to know where that hit occurred within a temporal frame. Timing is
+therefore not a secondary implementation detail, but a central musical
+concept that the system must prioritise.
+
+\subsection{Machine Listening And Rhythmic Feature Extraction}\label{machine-listening-and-rhythmic-feature-extraction}
+
+Interactive rhythmic systems also require a form of machine listening.
+Scheirer's work on music-listening systems becomes relevant here because
+its framing of computational listening as the extraction of musically
+meaningful information such as tempo, segmentation and perceptual
+orientation \citep{scheirer2000musiclistening}. Although IT4s does not attempt full
+audio-scene understanding, it still faces a related problem: live
+performance events must be transformed into features that a
+computational agent can use for response planning.
+
+\subsection{Quantisation, Expressive Timing and Symbolic Representation}\label{quantisation-expressive-timing-and-symbolic-representation}
+
+A key challenge in rhythmic interaction is that performed timing is
+rarely perfectly aligned to a grid. Longuet-Higgins and Lee argue that
+rhythmic interpretation involves resolving ambiguity through assumptions
+about regularity, meter and grouping \citep{longuetHiggins1984rhythmic}.
+This is relevant to IT4s whose architecture converts temporally messy
+live input into a representation that is stable enough for analysis and
+response planning. Quantisation is therefore not just a technical
+convenience; it is an interpretive act that decides how performed events
+relate to an underlying rhythmic structure.
+
+At the same time, quantisation introduces a trade-off. A rigid grid can
+make analysis and generation tractable but can also flatten expressive
+timing. The musical importance of expressive timing in drum patterns is
+highlighted by Gillick et al.'s work on drum performance with regard to
+generation and humanisation. In particular, the research emphasises the
+relationship between a performed groove and an associated abstract
+rhythmic structure \citep{gillick2019learning}. IT4s employs a clear and
+interpretable symbolic representation for the later planning stages,
+while retaining timing offset information within the representation of a
+compiled turn. This positions the system as suitable for analysis of a
+deterministic nature, while maintaining extensibility in the form of
+richer expressive timing and humanisation for future work.
+
+\subsection{Implications For Intelli-Trading Fours}\label{implications-for-intelli-trading-fours}
+
+The literature on rhythm, machine listening and timing supports a
+central design decision in IT4s, the system therefore perceives rhythm
+not only as musical content, but as an architectural coordination
+problem. Timing must be preserved, discretised, interpreted and
+rescheduled across the interaction loop. While Intelli-Trading Fours
+does not implement continuous entrainment, the next section builds on
+these ideas by considering trading fours specifically, where turn-taking
+is not only a technical convenience but a musical practice that gives
+the interaction its dialogic form.
+
+\section{Trading Fours and Turn-Based Musical Dialogue}\label{trading-fours-and-turn-based-musical-dialogue}
+
+Trading fours serves as a useful musical model for IT4s because it
+contains a clear alternation between listening and response. In jazz
+practice, a performer does not simply produce an isolated phrase; they
+contribute musical material that invites a subsequent reply. Hodson and
+Donnay et al. use trading fours as a model of interactive improvisation
+and frame it as a form of musical communication involving collaborative
+and emergent exchange \citep{donnay2014neural,hodson2007interaction}. For IT4s,
+this means that trading fours is not only a stylistic reference, it
+provides a structured interaction model in which the meaning of a
+response depends on its relation to the preceding turn.
+
+This structure is not a simplification but an execution of real
+improvisation, giving the system a practical form of musical
+accountability. Each AI response is evaluated as an answer to a specific
+human turn, rather than as an independent generated artefact. This
+supports the dissertation\textquotesingle s wider distinction between
+autonomous generation and responsive interaction: IT4s does not claim to
+be a fully open-ended improviser, but it does implement the conditions
+needed for repeated rhythmic dialogue. The turn boundary makes the
+source material identifiable, the response process inspectable and the
+re-entry point testable.
+
+The limitation is that this design reduces the simultaneity of human
+musical interplay. IT4s does not currently negotiate tempo with the
+performer. Instead, it treats trading fours as a discrete
+call-and-response structure in which musical dialogue is mediated by
+state transitions. This trade-off is appropriate for the current
+prototype because it makes the interaction observable and technically
+defensible: responsiveness can be discussed in terms of capture
+accuracy, response timing, phase correctness and loop closure, while
+richer forms of overlapping improvisation remain viable future work.
+
+\section{Metrical Hierarchy, Salience \& Rhythmic Structure}\label{metrical-hierarchy-salience-rhythmic-structure}
+
+After a structured form of rhythmic input has been achieved, the
+challenge becomes determining which elements of that structure are
+musically significant. Rhythm, more than simply a sequence of discrete
+events, is better described as a perceptual construct shaped by
+hierarchical organisation, accent and expectation.
+
+\subsection{Metrical Hierarchy and Rhythmic Interpretation}\label{metrical-hierarchy-and-rhythmic-interpretation}
+
+Research in the human perception of rhythm demonstrates that listeners
+do not interpret rhythmic sequences as flat patterns of events, but as
+structured hierarchies organised around an underlying meter.
+\citet{longuetHiggins1984rhythmic} argue that rhythmic interpretation
+depends on assumptions about regularity, grouping and metrical
+structure, such that identical event sequences may be perceived
+differently depending on their inferred context.
+
+Within this hierarchical framework, not all events contribute equally to
+perceived structure. Certain events become points of emphasis or
+structural anchors that draw attention based on their position,
+intensity or contextual contrast. Salience may arise from multiple
+factors, including dynamic accent, placement on metrically strong
+positions, relative isolation or proximity to phrase boundaries.
+
+From a computational perspective, this implies the need for models that
+estimate the relative importance of events rather than treating all
+onsets uniformly. Such models typically combine heuristic indicators of
+salience, allowing systems to approximate which elements of a rhythmic
+pattern are likely to carry structural weight.
+
+This abstraction gives way to systematic reasoning about rhythm,
+including the identification of recurring patterns, structural positions
+and relationships between events. While such representations necessarily
+simplify continuous performance, they provide a tractable framework for
+both analysis and generation, particularly in systems operating under
+real-time constraints.
+
+\subsection{Implications for Interactive Musical Systems}\label{implications-for-interactive-musical-systems}
+
+Taken together, these perspectives highlight that rhythmic interaction
+requires systems to operate on structured representations that capture
+both hierarchical organisation and perceptual salience. For interactive
+systems, this is particularly important because responses must relate
+meaningfully to the perceived structure of input rather than to its raw
+event stream.
+
+Accordingly, effective interaction requires models that can:
+
+\begin{itemize}
+\item
+  identify structurally significant events
+\item
+  capture phrase-level patterns and activity contours
+\item
+  operate on representations that balance interpretability with
+  computational tractability
+\end{itemize}
+
+These requirements directly motivate the use of feature-based rhythmic
+analysis in interactive systems, where structural descriptors provide a
+bridge between raw input and higher-level response behaviour.
+
+\section{Evaluation of Interactive Music Systems}\label{evaluation-of-interactive-music-systems}
+
+Given the interaction-focused framing established in earlier sections,
+evaluation in Intelli-Trading Fours cannot be reduced to the quality of
+generated output alone. Prior work suggests generative music systems do
+not admit a single objective ground truth, instead they are evaluated
+across dimensions such as coherence, variability and interactivity
+\citep{briot2020deep}. This complicates the use of
+conventional output-based metrics, particularly in systems where musical
+material is produced in response to external input rather than in
+isolation.
+
+This challenge is amplified in interactive contexts due to the
+aforementioned research by \citet{smith2022humanai} and \citet{ostermann2021evaluating} who argue
+place creative value within interaction and evaluate reactive
+accompaniment systems through metrics that depend on real-time behaviour
+and contextual alignment.
+
+As a result, evaluation in this project is framed in terms of system
+behaviour within the interaction loop. Rather than treating generated
+rhythms as standalone artefacts, the evaluation focuses on architectural
+and behavioural properties aligned with the system's design objectives.
+These include timing correctness, state consistency, responsiveness,
+interpretability and structural response behaviour. This approach
+ensures that evaluation reflects the system's contribution as a
+closed-loop, real-time interaction architecture, rather than as a fully
+autonomous generative model.

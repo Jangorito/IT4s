@@ -1,0 +1,361 @@
+\chapter{Introduction}\label{introduction}
+
+\section{Motivation}\label{motivation}
+
+The motivation for Intelli-Trading Fours (IT4s) takes inspiration from
+an improvisational practice in Jazz known as ``trading-fours'' where
+musicians alternate short improvised phrases in an exchange with each
+other. This format enforces a cycle in which listening, interpretation
+and response are all derivative of each other, introducing an element of
+conversation to musical expression.
+
+This interaction model demands close collaboration and near-instant
+responsive creativity as performers. Its success is predicated on the
+performers' mutual ability to contextually interpret incoming musical
+material and generate a musically coherent reply within a constrained
+time window. Interdisciplinary research suggests that interactive
+improvisation engages distinct cognitive and neural processes, affirming
+this project's emphasis on mutual responsiveness and temporal alignment
+in music dialogue \citep{donnay2014neural}.
+
+From a computational perspective, IT4s provides a framework for human-AI
+interaction that is both practical and structured. Performances are
+segmented into explicit turns comprising input capture, analysis,
+decision-making and response generation. This allows the system to
+distinguish and interpret each phase through specialised, extensible
+subsystems. This separation also reduces the ambiguity associated with
+continuous co-improvisation \citep{assayag2006skini}, instead
+providing a closed-loop interaction architecture where the system
+repeatedly listens, processes, responds and re-enters a waiting state.
+
+This model forms the foundation of the system design: the implementation
+formalises interaction as a sequence of alternating human and AI turns,
+positioning the system as an interpretable collaborator operating in
+real time rather than as a passive offline generator. Rather than
+treating generation as an isolated musical artefact, IT4s situates each
+response within a repeated temporal exchange, reflecting accounts of
+computer music that emphasise musical structure as emerging across
+interacting temporal levels \citep{vaggione1993determinism} and interactive systems
+that foreground performer-conditioned response (Pachet, 2002; Pasquier
+et al., 2016).
+
+This work therefore investigates not only how an AI system can generate
+rhythmic material, but more pertinently, how it can meaningfully
+participate within a structured, time-sensitive interaction loop that
+mirrors human musical dialogue.
+
+\section{Research Problem}\label{research-problem}
+
+Designing an interactive musical system capable of participating in
+real-time rhythmic improvisation presents a multi-stage technical
+challenge. Real-time systems must sustain a state of temporal coupling
+with performer input. Unlike offline or non-interactive generative
+approaches, these systems must: capture live musical events, derive an
+interpretable representation from them, generate response decisions and
+produce the audible output before returning to a ready state quickly
+enough for the exchange to remain musically coherent.
+
+Raw performance is not immediately suitable for musical reasoning within
+an Human Computer Interaction (HCI) like it might be between two human
+performers; this forms a central difficulty for the system. Hit events
+or audio signals need transforming into a symbolic representation that
+preserves musical properties such as timing, intensity and phrase
+boundaries whilst remaining tractable for computation. Research into
+both computational music analysis and rhythm perception show rhythmic
+interpretation to be more than a binary matter of counting events;
+properties such timing, salience, meter and grouping all contribute to
+the way rhythmic material is construed \citep{longuetHiggins1984rhythmic,temperley2009music,levitin2018psychology}.
+
+This aforementioned representation subsequently informs response
+decisions. In the case of Intelli-Trading Fours, this necessitates an
+interpretable planning stage where response behaviour is variably
+influenced by analysed features in a controllable manner. Within this
+approach lies emphasis on ensuring the relationship between human input
+and system response observable and musically justifiable; thus
+distinguishing this approach from others that solely prioritise
+autonomous or opaque generation when considering the production of
+rhythmic material \citep{pachet2002continuator,pasquier2016introduction,smith2022humanai}.
+
+Finally, this interaction must be sustained across repeated cycles.
+After musically responding, the system needs to be poised for the next
+human turn without accumulating stale state or losing synchronisation.
+Therefore positioning this project as a response to the following
+problem:
+
+\emph{\textbf{How can a closed-loop, real-time system capture and
+represent human rhythmic input, analyse it, plan an interpretable
+response, realise an audible output and sustain this process across
+repeated turn-taking cycles?}}
+
+Intelli-Trading Fours addresses this problem through the implementation
+of a closed-loop rhythmic interaction pipeline spanning Bela input
+capture across OSC with Unity-based turn orchestration, symbolic
+rhythmic analysis, response planning, interim response realisation,
+ChucK/Chunity playback and loop closure.
+
+\section{Aims and Research Questions}\label{aims-and-research-questions}
+
+The aim of this report is to design, implement and evaluate a
+closed-loop prototype for turn-based human-AI rhythmic interaction.
+Intelli-Trading Fours focuses on the real-time capture of human rhythmic
+input, its conversion into a symbolic representation, the extraction of
+interpretable rhythmic features, response planning, audible playback and
+loop closure across repeated interaction cycles. The project does not
+aim to deliver a fully completed autonomous drumming agent; rather, it
+investigates the technical architecture required for a system to
+participate meaningfully in a structured rhythmic exchange.
+
+To support this aim, the project has the following objectives:
+
+\begin{itemize}
+\item
+  To implement a real-time input pipeline capable of capturing human
+  rhythmic performance through embedded hardware and OSC communication.
+\item
+  To transform captured hit events into a symbolic rhythmic
+  representation suitable for analysis, planning and playback.
+\item
+  To design rhythmic analysis modules that extract musically relevant
+  features such as density, energy, salient anchors, end activity and
+  segment-level activity profiles.
+\item
+  To implement an interpretable response-planning stage in which
+  analysed rhythmic features influence response behaviour in a
+  controllable and observable manner.
+\item
+  To integrate interim response realisation and ChucK/Chunity playback
+  within a closed-loop turn-taking architecture that can return to a
+  ready state after an AI response.
+\item
+  To evaluate the implemented system through tests, diagnostic tools and
+  Unity runtime observability, while identifying the limitations of the
+  current response-generation layer.
+\end{itemize}
+
+The dissertation is therefore guided by the following research
+questions:
+
+\begin{itemize}
+\item
+  RQ1: How can a real-time system structure repeated turn-based rhythmic
+  interaction between a human drummer and an AI agent?
+\item
+  RQ2: How can human rhythmic input be represented and analysed in a
+  form suitable for response planning?
+\item
+  RQ3: How can interpretable planning connect analysed rhythmic features
+  to musically justifiable response behaviour?
+\item
+  RQ4: What are the technical limitations of closing the interaction
+  loop using an interim transformation-based response layer?
+\end{itemize}
+
+These questions reflect the implemented scope of Intelli-Trading Fours.
+They focus the dissertation on real-time interaction architecture,
+rhythmic representation, analysis, planning and loop closure, while
+leaving the completion of a richer generative response-realisation
+pipeline as a defined area for future work.
+
+\section{Implemented Scope and Deferred Scope}\label{implemented-scope-and-deferred-scope}
+
+Intelli-Trading Fours is implemented as a closed-loop prototype for
+turn-based human-AI rhythmic interaction whose system architecture
+supports its titular full interaction cycle. The exchange required for a
+Trading Fours style cycle: human input capture, symbolic rhythmic
+representation compilation, analysis that informs response planning,
+audible AI response played back and finally a return to a state ready
+for human input capture again. This establishes the project as an
+interactive real-time system rather than a collection of disconnected
+generation components.
+
+The core infrastructure necessary to support this interaction loop is
+enabled through the following layers:
+
+\begin{itemize}
+\item
+  Input
+\item
+  Representation
+\item
+  Analysis \& Planning
+\item
+  Output
+\item
+  Observability
+\end{itemize}
+
+These infrastructural components form the technical foundation of the
+system and are the primary focus of the dissertation.
+
+The response-generation pipeline is deliberately limited in scope.
+Whilst the system implements an interpretable response-planning layer
+and a prototype structural generation layer with planning logic and
+skeleton-oriented response design, the final response realisation stage,
+in which planned intent and structural skeletons are interpreted and
+converted into a fully developed rhythmic response, remains incomplete.
+In the current scope, audible AI responses are produced using an interim
+transformation-based mechanism. This design prioritises evaluable
+decision-making over expressive synthesis, leaving richer generative
+response realisation as a defined area for future work.
+
+This distinction is central to this report. The project should be
+understood as a closed-loop rhythmic interaction prototype whose main
+contribution lies in the architecture, representation, analysis,
+planning, playback integration and observability required to support
+repeated human-AI rhythmic exchange. The partial state of the final
+generation layer is treated as an implementation limitation and future
+development path, rather than as a central measure of the system's
+success.
+
+A scope summary is shown in Table~\ref{tab:scope-summary}.
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.4433}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.1799}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3597}}@{}}
+\caption{Project scope summary}\label{tab:scope-summary}\\
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\textbf{Area}
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\textbf{Status}
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\textbf{Role in Dissertation}
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Skeleton-oriented structural generation
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Prototype
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Prototype architecture
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Audible response generation
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Interim implementation
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Limitation-aware implementation
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Turn-taking orchestration
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implemented
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Core system architecture
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Bela/OSC input capture + Hit buffering and turn capture
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implemented
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implementation chapter
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Quantisation into PatternTurn
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implemented
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implementation chapter
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Rhythmic analysis modules
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implemented
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Core technical contribution
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Response planning
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implemented
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Core technical contribution
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+ChucK/Chunity playback
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implemented
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implementation chapter
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Loop closure after playback
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implemented
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Closed-loop architecture contribution
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Debugging, observability tools, Automated tests and diagnostics
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Implemented
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Evaluation/supporting infrastructure
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+User evaluation with drummers
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Deferred
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Evaluation limitation / future work
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Full response realisation from plan/skeleton
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Deferred
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Future work
+\end{minipage} \\
+\begin{minipage}[b]{\linewidth}\raggedright
+Long-term musical memory
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Deferred
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Future work
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\end{longtable}
+
+
+\section{Contributions}\label{contributions}
+
+A summary of the main contributions is shown in Table~\ref{tab:contributions-summary}.
+
+\begin{longtable}[]{@{}lll@{}}
+\caption{Main project contributions}\label{tab:contributions-summary}\\
+\toprule\noalign{}
+\textbf{Contribution} & \textbf{Realisation (System Components)} &
+\textbf{Significance} \\
+\textbf{Closed-loop turn-taking interaction model} & TurnLoopController,
+TurnPhase, loop closure logic & Formalises real-time human-AI rhythmic
+exchange as an iterative, state-driven interaction system \\
+\textbf{Real-time sensor-to-symbolic capture pipeline} & Bela input, OSC
+messaging, OscHitReceiver, HitBuffer & Enables low-latency
+transformation of physical performance into analysable rhythmic data \\
+\textbf{Hybrid symbolic-temporal rhythm representation} & TurnWindow,
+PatternCompiler, PatternTurn & Captures both quantised structure and
+expressive timing, supporting meaningful musical analysis \\
+\textbf{Feature-driven rhythmic analysis framework} & Density, energy,
+anchor, end-activity, segment profile analysers & Provides
+interpretable, multi-dimensional characterisation of rhythmic input \\
+\textbf{Deterministic response planning model} & ResponsePlanner,
+ResponsePlan, response-type system & Enables explainable mapping from
+musical features to structured response strategies \\
+\textbf{Structured response generation pipeline} & SkeletonBuilder, map
+builders, generation pipeline stages & Decomposes rhythm generation into
+controllable stages, enabling variation and constraint-driven
+synthesis \\
+\textbf{Integrated real-time playback system} & IT4ChuckTurnPlayer,
+ChucK/Chunity scripts & Closes the interaction loop through synchronised
+audio response \\
+\textbf{System observability and debugging framework} & Debug
+presenters, visualisation panels & Supports interpretability,
+development and evaluation of system behaviour \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\end{longtable}

@@ -1,7 +1,0 @@
-Nice to haves:
-- Debugging mode phase that plays captured turn before generating a response (tlc)
-- improve + randomise fill mode's fill
-
-Wanna have:
-- close pipeline
-- fling in AI

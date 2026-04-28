@@ -1,3 +1,0 @@
-# HardwareSim
-
-Embedded hardware project.
