@@ -87,6 +87,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             bool isPressurised =
                 isHighEnergy &&
                 sourceDensity >= config.PressurisedDensityThreshold;
+            bool hasManyActiveSteps = density.ActiveStepCount >= config.ManyActiveStepsThreshold;
             bool isPredictableProfile = IsPredictableShape(profile.DensityShape) || IsPredictableShape(profile.EnergyShape);
 
             return new PlanningContext(
@@ -106,6 +107,7 @@ namespace IT4s.Rhythm.ResponsePlanning
                 hasConversationalSpace,
                 isCongested,
                 isPressurised,
+                hasManyActiveSteps,
                 isPredictableProfile,
                 GetTurnLengthSteps(analysis));
         }
@@ -245,6 +247,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             if (context.ActivityIsBalanced) score += config.ProfileRefinementScore;
             if (context.EndingIsOpen) score -= config.EndingRefinementScore;
             if (context.IsPredictableProfile) score -= config.ProfileRefinementScore * 0.5f;
+            if (context.HasManyActiveSteps) score -= config.ManyActiveStepsScore * 0.5f;
             return score;
         }
 
@@ -259,6 +262,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             if (!context.HasStrongEnding) score += config.EndingRefinementScore * 0.5f;
             if (context.ActivityIsBalanced) score += config.ProfileRefinementScore;
             if (context.IsBusy) score -= config.DensityPrimaryScore * 0.5f;
+            if (context.HasManyActiveSteps) score -= config.ManyActiveStepsScore * 0.5f;
             return score;
         }
 
@@ -269,6 +273,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             if (context.IsHighEnergy) score += config.EnergyPrimaryScore;
             if (context.IsCongested) score += config.CongestionScore;
             if (context.IsPressurised) score += config.PressurisedScore;
+            if (context.HasManyActiveSteps) score += config.ManyActiveStepsScore;
             if (context.IsPredictableProfile) score += config.ProfileRefinementScore * 0.5f;
             if (context.IsSparse && !context.IsPressurised) score -= config.DensityPrimaryScore;
             if (context.IsLowEnergy) score -= config.EnergyPrimaryScore * 0.5f;
@@ -278,13 +283,8 @@ namespace IT4s.Rhythm.ResponsePlanning
         private static float ScoreIntensify(PlanningContext context, ResponsePlannerConfig config)
         {
             float score = 0f;
-            if (context.IsSparse && !context.IsPressurised) score += config.DensityPrimaryScore;
             if (context.IsLowEnergy) score += config.EnergyPrimaryScore;
-            else if (context.IsMediumEnergy) score += config.EnergyPrimaryScore * 0.5f;
-            if (!context.HasMeaningfulAnchors) score += config.AnchorRefinementScore * 0.5f;
-            if (!context.HasStrongEnding) score += config.EndingRefinementScore * 0.5f;
-            if (context.IsBusy) score -= config.DensityPrimaryScore * 0.75f;
-            if (context.IsCongested) score -= config.CongestionScore;
+            if (context.IsHighEnergy) score -= config.EnergyPrimaryScore;
             if (context.IsPressurised) score -= config.PressurisedScore;
             return score;
         }
@@ -314,13 +314,14 @@ namespace IT4s.Rhythm.ResponsePlanning
         private static float ScoreFill(PlanningContext context, ResponsePlannerConfig config)
         {
             float score = 0f;
-            if (context.IsSparse) score += config.DensityPrimaryScore;
-            if (context.EndingIsOpen) score += config.EndingRefinementScore * 1.5f;
-            else if (!context.HasStrongEnding) score += config.EndingRefinementScore * 0.5f;
-            if (context.ActivityIsBackLoaded) score += config.ProfileRefinementScore;
-            if (context.IsLowEnergy) score += config.EnergyPrimaryScore * 0.5f;
-            if (context.HasStrongEnding) score -= config.EndingRefinementScore;
+            bool isGenuinelySparse = context.SourceDensity <= config.VerySparseDensityThreshold;
+            if (isGenuinelySparse) score += config.DensityPrimaryScore;
+            else if (context.IsSparse && !context.IsPressurised) score += config.DensityPrimaryScore * 0.5f;
+            if (context.EndingIsOpen && isGenuinelySparse) score += config.EndingRefinementScore * 0.5f;
+            if (!isGenuinelySparse && !context.IsSparse) score -= config.DensityPrimaryScore * 0.5f;
             if (context.IsBusy) score -= config.DensityPrimaryScore * 0.5f;
+            if (context.IsPressurised) score -= config.PressurisedScore;
+            if (context.HasManyActiveSteps) score -= config.ManyActiveStepsScore * 0.5f;
             return score;
         }
 
@@ -372,7 +373,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             }
 
             if (ContainsPair(candidates, ResponseType.Fill, ResponseType.Intensify) &&
-                IsWeakClosurePrimaryIssue(context))
+                IsGenuinelySparse(context, config))
             {
                 return ResponseType.Fill;
             }
@@ -440,10 +441,9 @@ namespace IT4s.Rhythm.ResponsePlanning
                 !context.EndingIsOpen;
         }
 
-        private static bool IsWeakClosurePrimaryIssue(PlanningContext context)
+        private static bool IsGenuinelySparse(PlanningContext context, ResponsePlannerConfig config)
         {
-            return context.EndingIsOpen ||
-                (!context.HasStrongEnding && context.ActivityIsBackLoaded);
+            return context.SourceDensity <= config.VerySparseDensityThreshold;
         }
 
         private static bool HasBalancedAnchoredIdentity(PlanningContext context)
@@ -592,7 +592,8 @@ namespace IT4s.Rhythm.ResponsePlanning
                 context.HasConversationalSpace,
                 context.IsPredictableProfile,
                 context.IsCongested,
-                context.IsPressurised);
+                context.IsPressurised,
+                context.HasManyActiveSteps);
         }
 
         private static ResponsePlannerNumericSummary CreateNumericSummary(PlanningContext context)
@@ -648,6 +649,7 @@ namespace IT4s.Rhythm.ResponsePlanning
             if (context.IsPredictableProfile) descriptors.Add("PredictableProfile");
             if (context.IsCongested) descriptors.Add("Congested");
             if (context.IsPressurised) descriptors.Add("Pressurised");
+            if (context.HasManyActiveSteps) descriptors.Add("ManyActiveSteps");
 
             return descriptors.Count == 0
                 ? "Neutral"

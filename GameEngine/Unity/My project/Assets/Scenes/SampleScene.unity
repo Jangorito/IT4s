@@ -1015,6 +1015,9 @@ MonoBehaviour:
   showAiPatternPanel: 0
   maxPanelWidth: 980
   screenPadding: {x: 16, y: 16}
+  exportHumanPanelKey: 112
+  exportSuperSize: 4
+  exportFolderName: DiagnosticsOutput/DebugPanelExports
 --- !u!1 &2063823081
 GameObject:
   m_ObjectHideFlags: 0

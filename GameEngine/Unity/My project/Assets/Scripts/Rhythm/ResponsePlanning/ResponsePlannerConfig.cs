@@ -11,6 +11,7 @@ namespace IT4s.Rhythm.ResponsePlanning
         public float LowEnergyThreshold { get; set; } = 0.35f;
         public float HighEnergyThreshold { get; set; } = 0.70f;
         public float PressurisedDensityThreshold { get; set; } = 0.30f;
+        public int ManyActiveStepsThreshold { get; set; } = 28;
 
         public int MeaningfulAnchorCountThreshold { get; set; } = 1;
         public float MeaningfulAnchorScoreThreshold { get; set; } = 0.65f;
@@ -35,6 +36,7 @@ namespace IT4s.Rhythm.ResponsePlanning
         public float ConversationalSpaceScore { get; set; } = 1.0f;
         public float CongestionScore { get; set; } = 1.0f;
         public float PressurisedScore { get; set; } = 1.5f;
+        public float ManyActiveStepsScore { get; set; } = 5.0f;
         public float PredictableProfileScore { get; set; } = 1.0f;
 
         public float DensityContextAdjustment { get; set; } = 0.05f;
